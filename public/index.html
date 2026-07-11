@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Гант CAB-2177 — Переход на ЭТрН</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.5}
+  .header{background:#fff;border-bottom:1px solid #e2e8f0;padding:20px 28px;position:sticky;top:0;z-index:100}
+  .header h1{font-size:20px;font-weight:700;color:#0f172a;margin-bottom:2px}
+  .header .subtitle{font-size:13px;color:#64748b}
+  .storage-warning{background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e;font-size:12px;padding:8px 28px;display:none}
+  .storage-info{background:#eff6ff;border-bottom:1px solid #bfdbfe;color:#1e40af;font-size:12px;padding:6px 28px}
+  .storage-ok{position:fixed;top:16px;right:16px;background:#16a34a;color:#fff;font-size:12px;padding:6px 14px;border-radius:6px;display:none;z-index:2000;box-shadow:0 2px 8px rgba(0,0,0,.2);transition:opacity .3s}
+  .cards{display:flex;gap:12px;padding:16px 28px;flex-wrap:wrap}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 18px;min-width:130px;flex:1;max-width:200px;transition:box-shadow .2s}
+  .card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .card .num{font-size:28px;font-weight:700;line-height:1}
+  .card .lbl{font-size:11px;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+  .card.red .num{color:#dc2626}
+  .card.blue .num{color:#2563eb}
+  .card.orange .num{color:#ea580c}
+  .card.gray .num{color:#64748b}
+  .view-toggle{display:flex;gap:6px;padding:0 28px 12px}
+  .view-toggle button{padding:7px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;color:#334155;transition:all .2s}
+  .view-toggle button:hover{border-color:#3b82f6}
+  .view-toggle button.active{background:#2563eb;border-color:#2563eb;color:#fff}
+  .filters{padding:12px 28px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .filter-group{position:relative;display:inline-block}
+  .filter-btn{padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;color:#334155;background:#fff;cursor:pointer;outline:none;display:flex;align-items:center;gap:6px;transition:all .2s;user-select:none}
+  .filter-btn:hover{border-color:#3b82f6;background:#f0f9ff}
+  .filter-btn.active{border-color:#3b82f6;background:#eff6ff;color:#2563eb}
+  .filter-btn .arrow{font-size:10px;transition:transform .2s}
+  .filter-btn.active .arrow{transform:rotate(180deg)}
+  .filter-btn .count-badge{background:#3b82f6;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600;min-width:18px;text-align:center}
+  .filter-label{font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-right:-4px}
+  .filter-dropdown{position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;min-width:220px;max-height:320px;display:none;flex-direction:column}
+  .filter-dropdown.open{display:flex}
+  .filter-dropdown-header{padding:8px 12px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center}
+  .filter-dropdown-header span{font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+  .filter-toggle-all{font-size:11px;color:#3b82f6;cursor:pointer;font-weight:600;border:none;background:none;padding:2px 4px}
+  .filter-toggle-all:hover{text-decoration:underline}
+  .filter-dropdown-body{overflow-y:auto;padding:6px 0;flex:1}
+  .filter-check{display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;font-size:13px;color:#334155;transition:background .15s}
+  .filter-check:hover{background:#f1f5f9}
+  .filter-check input[type="checkbox"]{width:15px;height:15px;accent-color:#3b82f6;cursor:pointer;flex-shrink:0}
+  .filter-check label{cursor:pointer;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .reset-btn{padding:6px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;color:#64748b;background:#fff;cursor:pointer;transition:all .2s;font-weight:600}
+  .reset-btn:hover{border-color:#ef4444;color:#ef4444;background:#fef2f2}
+  .milestone-btn{padding:6px 14px;border:1px solid #c4b5fd;border-radius:6px;font-size:12px;color:#6d28d9;background:#f5f3ff;cursor:pointer;transition:all .2s;font-weight:600}
+  .milestone-btn:hover{border-color:#7c3aed;background:#ede9fe}
+  .milestones-bar{padding:0 28px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .milestone-chip{display:inline-flex;align-items:center;gap:6px;background:#f5f3ff;border:1px solid #ddd6fe;color:#6d28d9;font-size:11px;padding:3px 8px 3px 10px;border-radius:12px;font-weight:600}
+  .milestone-chip .mx{cursor:pointer;color:#a78bfa;font-weight:700}
+  .milestone-chip .mx:hover{color:#dc2626}
+  .instructions{padding:2px 28px 10px;font-size:12px;color:#94a3b8;transition:color .2s}
+  .gantt-split{margin:0 28px;display:flex;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
+  .gantt-left-pane{flex:none;width:850px;max-height:640px;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;border-right:1px solid #e2e8f0}
+  .gantt-left-pane::-webkit-scrollbar{width:0;height:0}
+  .gantt-right-pane{flex:1;max-height:640px;overflow:auto;min-width:0}
+  .section-title{font-size:13px;font-weight:700;color:#475569;padding:10px 12px 6px;border-bottom:1px solid #e2e8f0;margin-bottom:0;text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px;position:sticky;top:0;z-index:20;background:#fff;height:36px;box-sizing:border-box;overflow:hidden}
+  .section-title-spacer{height:36px;position:sticky;top:0;z-index:14;background:#f8fafc;border-bottom:1px solid #e2e8f0;box-sizing:border-box}
+  .timeline-header-spacer{height:26px;position:sticky;top:36px;z-index:19;background:#fff;border-bottom:1px solid #e2e8f0;box-sizing:border-box}
+  .section-title .badge{background:#e2e8f0;color:#475569;font-size:11px;padding:1px 7px;border-radius:10px;font-weight:600}
+  .sys-ewm .badge{background:#dbeafe;color:#1d4ed8}
+  .sys-erp .badge{background:#fff7ed;color:#ea580c}
+  .sys-test .badge{background:#f3e8ff;color:#7c3aed}
+  .sys-abap .badge{background:#f0fdf4;color:#16a34a}
+  .sys-basis .badge{background:#f1f5f9;color:#64748b}
+  .sys-other .badge{background:#f1f5f9;color:#64748b}
+  .gantt-table{border-collapse:separate;border-spacing:0;table-layout:fixed}
+  .gantt-table th{font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:6px 8px;text-align:left;border-bottom:1px solid #e2e8f0;position:sticky;top:0;background:#f8fafc}
+  .gantt-table td{padding:4px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle;font-size:13px;height:35px;box-sizing:border-box}
+  .gantt-table tr:hover td{background:#f1f5f9}
+  .gantt-table tr.task-row{cursor:pointer}
+  .col-order{width:30px;text-align:center;white-space:nowrap;padding:4px 2px !important}
+  .drag-handle{display:block;cursor:grab;font-size:15px;line-height:1;color:#94a3b8;user-select:none;touch-action:none;text-align:center}
+  .drag-handle:hover{color:#2563eb}
+  .drag-handle:active{cursor:grabbing}
+  tr.dragging-row{opacity:.45;background:#eff6ff !important}
+  tr.dragging-row td{background:#eff6ff !important}
+  .gantt-table tr.drop-target-above td{box-shadow:inset 0 2px 0 #3b82f6}
+  .col-key{width:150px;white-space:nowrap}
+  .col-summary{width:280px}
+  .col-assignee{width:170px;white-space:nowrap}
+  .col-status{width:150px}
+  .col-estimate{width:70px;white-space:nowrap;text-align:center}
+  .col-chart{}
+  a.key-link{color:#2563eb;text-decoration:none;font-weight:600;font-size:12px}
+  a.key-link:hover{text-decoration:underline}
+  .link-btn{cursor:pointer;color:#cbd5e1;font-size:12px;margin-left:6px;user-select:none}
+  .link-btn:hover{color:#3b82f6}
+  .link-btn.active{color:#2563eb;font-weight:700}
+  .del-btn{cursor:pointer;color:#cbd5e1;font-size:12px;margin-left:5px;user-select:none}
+  .del-btn:hover{color:#dc2626}
+  .sys-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.3px;margin-left:6px;vertical-align:middle}
+  .summary-text{color:#334155;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;display:block}
+  .assignee-text{color:#64748b;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px;display:block}
+  .assignee-text.editable{cursor:pointer}
+  .assignee-text.editable:hover{background:#eff6ff;border-radius:3px}
+  .status-badge.editable{cursor:pointer}
+  .status-badge.editable:hover{outline:2px solid #93c5fd;outline-offset:1px}
+  .edit-input{font-size:12px;padding:2px 4px;border:1px solid #3b82f6;border-radius:4px;max-width:160px}
+  .gantt-split.drag-over-zone{outline:2px dashed #3b82f6;outline-offset:-2px}
+  .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.5);z-index:5000;align-items:center;justify-content:center}
+  .modal-box{background:#fff;border-radius:12px;padding:24px;width:460px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  .modal-box h3{font-size:16px;margin-bottom:16px;color:#0f172a}
+  .modal-box label{display:block;font-size:12px;font-weight:600;color:#475569;margin:10px 0 4px}
+  .modal-box label .hint{font-weight:400;color:#94a3b8;font-size:11px}
+  .modal-box input[type="text"],.modal-box input[type="date"],.modal-box input[type="number"],.modal-box select{width:100%;padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:inherit}
+  .modal-row{display:flex;gap:12px}
+  .modal-row>div{flex:1}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+  .filter-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+  .filter-item:last-child{border-bottom:none}
+  .filter-item:hover{background:#f0f9ff}
+  .filter-item .fav{color:#f59e0b;font-size:11px}
+  .estimate-text{color:#475569;font-size:12px;font-weight:600}
+  .status-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap}
+  .st-testing{background:#dbeafe;color:#1d4ed8}
+  .st-dev{background:#ffedd5;color:#c2410c}
+  .st-arch{background:#fef3c7;color:#92400e}
+  .st-work{background:#fee2e2;color:#b91c1c}
+  .st-new{background:#f1f5f9;color:#475569}
+  .chart-cell{position:relative;height:26px}
+  .month-grid{position:absolute;top:0;left:0;right:0;bottom:0;display:flex}
+  .month-col{flex:1;border-right:1px solid #f1f5f9}
+  .month-col:last-child{border-right:none}
+  .bar{position:absolute;height:18px;top:4px;border-radius:4px;min-width:6px;transition:opacity .2s;cursor:grab;touch-action:none}
+  .bar:active{cursor:grabbing}
+  .bar:hover{opacity:.9;filter:brightness(1.05)}
+  .bar.overdue{background-image:repeating-linear-gradient(135deg,transparent,transparent 3px,rgba(255,255,255,.3) 3px,rgba(255,255,255,.3) 6px);outline:2px solid #dc2626;outline-offset:-1px}
+  .bar.flagged::after{content:'⚑';position:absolute;right:-14px;top:-2px;font-size:12px;color:#dc2626}
+  .bar .handle{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:6;touch-action:none}
+  .bar .handle.left{left:-3px}
+  .bar .handle.right{right:-3px}
+  .bar .handle:hover{background:rgba(255,255,255,.6)}
+  .today-line{position:absolute;top:0;bottom:0;width:2px;background:#dc2626;z-index:5;pointer-events:none}
+  .today-label{position:absolute;top:-16px;font-size:9px;color:#dc2626;font-weight:700;white-space:nowrap;transform:translateX(-50%)}
+  .timeline-header{display:flex;border-bottom:1px solid #e2e8f0;margin-bottom:0;position:sticky;top:36px;z-index:15;background:#f8fafc;height:26px;box-sizing:border-box}
+  .timeline-header .month-h{flex:1;text-align:center;font-size:11px;color:#94a3b8;font-weight:600;padding:4px 0;text-transform:uppercase;letter-spacing:.3px}
+  .tooltip{position:fixed;background:#0f172a;color:#f8fafc;padding:10px 14px;border-radius:8px;font-size:12px;z-index:1000;pointer-events:none;max-width:380px;box-shadow:0 4px 16px rgba(0,0,0,.2);line-height:1.6;display:none}
+  .tooltip .tt-key{color:#60a5fa;font-weight:700}
+  .tooltip .tt-label{color:#94a3b8;font-size:11px}
+  .backlog-section{padding:20px 28px}
+  .backlog-section h2{font-size:15px;font-weight:700;color:#334155;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .backlog-section h2 .cnt{background:#e2e8f0;color:#64748b;font-size:12px;padding:2px 8px;border-radius:10px;font-weight:600}
+  .backlog-table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0}
+  .backlog-table th{font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:8px 12px;text-align:left;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+  .backlog-table td{padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}
+  .backlog-table tr:last-child td{border-bottom:none}
+  .backlog-table tr:hover td{background:#f8fafc}
+  .priority-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
+  .p-blocker{background:#dc2626}
+  .p-critical{background:#ea580c}
+  .p-important{background:#f59e0b}
+  .p-normal{background:#6b7280}
+  .p-minor{background:#94a3b8}
+  .legend{padding:12px 28px 24px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#64748b}
+  .legend-swatch{width:14px;height:10px;border-radius:3px}
+  .footer{padding:12px 28px 20px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;margin-top:8px}
+  #linksSvg path.linkpath{pointer-events:auto;cursor:pointer}
+  #linksSvg path.linkpath:hover{stroke:#dc2626 !important;stroke-width:2.5}
+  .milestone-line{position:absolute;top:0;width:0;border-left:2px dashed #7c3aed;z-index:4;pointer-events:none}
+  .milestone-marker{position:absolute;top:-9px;width:14px;height:14px;background:#7c3aed;transform:translateX(-50%) rotate(45deg);border-radius:2px;cursor:pointer;z-index:11;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .milestone-marker:hover{background:#dc2626}
+
+  /* Calendar view */
+  .calendar-section{padding:4px 28px 24px}
+  .cal-controls{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .cal-period-btn{padding:5px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;font-size:12px;cursor:pointer;color:#334155;font-weight:600}
+  .cal-period-btn.active{background:#eff6ff;border-color:#3b82f6;color:#2563eb}
+  .cal-nav-btn{padding:5px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;font-weight:600;color:#334155}
+  .cal-nav-btn:hover{border-color:#3b82f6;color:#2563eb}
+  .cal-period-label{font-weight:700;font-size:15px;color:#0f172a;min-width:220px}
+  .cal-spacer{width:12px}
+  .cal-month{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background:#fff}
+  .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);background:#f8fafc;border-bottom:1px solid #e2e8f0}
+  .cal-weekdays div{padding:6px 2px;text-align:center;font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+  .cal-day{min-height:82px;border-right:1px solid #f1f5f9;border-bottom:1px solid #f1f5f9;padding:4px;position:relative}
+  .cal-month-mini .cal-day{min-height:32px;padding:2px}
+  .cal-month-mini .cal-weekdays div{padding:3px 2px;font-size:9px}
+  .cal-day:nth-child(7n){border-right:none}
+  .cal-day-out{background:#fafbfc}
+  .cal-day-out .cal-day-num{color:#cbd5e1}
+  .cal-day-today{background:#fff7ed}
+  .cal-day-num{font-size:11px;font-weight:700;color:#475569;display:flex;align-items:center;gap:4px}
+  .cal-chips{margin-top:3px;display:flex;flex-direction:column;gap:2px}
+  .cal-chip{height:14px;border-radius:3px;font-size:9px;color:#fff;padding:0 4px;overflow:hidden;white-space:nowrap;cursor:pointer;line-height:14px;font-weight:600}
+  .cal-more{font-size:9px;color:#94a3b8;padding-left:2px}
+  .cal-milestone{color:#7c3aed;font-size:10px;cursor:default}
+  .cal-count-dot{display:inline-block;background:#3b82f6;color:#fff;font-size:8px;border-radius:8px;padding:0 4px;line-height:13px;font-weight:700}
+  .cal-week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+  .cal-week-col{border:1px solid #e2e8f0;border-radius:8px;padding:8px;min-height:220px;background:#fff}
+  .cal-week-col.cal-day-today{background:#fff7ed;border-color:#fdba74}
+  .cal-week-head{font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid #f1f5f9}
+  .cal-week-task{font-size:11px;color:#334155;padding:4px 6px;background:#f8fafc;border-radius:4px;margin-bottom:4px;cursor:pointer}
+  .cal-week-task:hover{background:#eff6ff}
+  .cal-milestone-week{font-size:11px;color:#6d28d9;font-weight:700;margin-bottom:6px}
+  .cal-quarter-row{display:flex;gap:14px;flex-wrap:wrap}
+  .cal-quarter-col{flex:1;min-width:260px}
+  .cal-quarter-title{font-weight:700;font-size:12px;color:#475569;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <h1 id="headerTitle">📊 Диаграмма Ганта Jira</h1>
+    <div id="userBadge" style="display:none;align-items:center;gap:10px;font-size:13px;color:#475569">
+      <span id="userName"></span>
+      <button class="reset-btn" onclick="refreshFromJira()" title="Перезагрузить свежие данные из Jira (локальные правки для этого фильтра будут очищены)">🔄 Обновить из Jira</button>
+      <button class="reset-btn" onclick="switchFilter()">🔀 Сменить фильтр</button>
+      <button class="reset-btn" onclick="doLogout()">Выйти</button>
+    </div>
+  </div>
+  <div class="subtitle" id="headerSubtitle">Загрузка…</div>
+</div>
+
+<div class="storage-info" id="storageInfo">💾 Изменения сохраняются локально в этом браузере (localStorage) — открывайте файл по тому же пути в том же браузере, чтобы видеть сохранённые правки.</div>
+<div class="storage-warning" id="storageWarning">⚠ Не удалось сохранить локально (приватный/инкогнито-режим браузера часто блокирует это). Изменения будут видны только до перезагрузки страницы.</div>
+
+<div class="cards" id="cards"></div>
+
+<div class="view-toggle">
+  <button id="ganttViewBtn" class="active" onclick="setViewMode('gantt')">📊 Гант</button>
+  <button id="calViewBtn" onclick="setViewMode('calendar')">📅 Календарь</button>
+</div>
+
+<div id="ganttViewSection">
+
+<div class="filters" id="filtersBar">
+  <div class="filter-group" id="fg-status">
+    <div class="filter-label">Статус</div>
+    <button class="filter-btn" onclick="toggleDropdown('status')">
+      <span class="filter-btn-text">Все</span>
+      <span class="arrow">▾</span>
+    </button>
+    <div class="filter-dropdown" id="dd-status">
+      <div class="filter-dropdown-header"><span>Статус</span><button class="filter-toggle-all" onclick="toggleAll('status')">Снять все</button></div>
+      <div class="filter-dropdown-body" id="cb-status"></div>
+    </div>
+  </div>
+  <div class="filter-group" id="fg-system">
+    <div class="filter-label">Система</div>
+    <button class="filter-btn" onclick="toggleDropdown('system')">
+      <span class="filter-btn-text">Все</span>
+      <span class="arrow">▾</span>
+    </button>
+    <div class="filter-dropdown" id="dd-system">
+      <div class="filter-dropdown-header"><span>Система</span><button class="filter-toggle-all" onclick="toggleAll('system')">Снять все</button></div>
+      <div class="filter-dropdown-body" id="cb-system"></div>
+    </div>
+  </div>
+  <div class="filter-group" id="fg-assignee">
+    <div class="filter-label">Исполнитель</div>
+    <button class="filter-btn" onclick="toggleDropdown('assignee')">
+      <span class="filter-btn-text">Все</span>
+      <span class="arrow">▾</span>
+    </button>
+    <div class="filter-dropdown" id="dd-assignee">
+      <div class="filter-dropdown-header"><span>Исполнитель</span><button class="filter-toggle-all" onclick="toggleAll('assignee')">Снять все</button></div>
+      <div class="filter-dropdown-body" id="cb-assignee"></div>
+    </div>
+  </div>
+  <div class="filter-group" id="fg-rank">
+    <div class="filter-label">Приоритет</div>
+    <button class="filter-btn" onclick="toggleDropdown('rank')">
+      <span class="filter-btn-text">Все</span>
+      <span class="arrow">▾</span>
+    </button>
+    <div class="filter-dropdown" id="dd-rank">
+      <div class="filter-dropdown-header"><span>Приоритет</span><button class="filter-toggle-all" onclick="toggleAll('rank')">Снять все</button></div>
+      <div class="filter-dropdown-body" id="cb-rank"></div>
+    </div>
+  </div>
+  <div class="filter-group" id="fg-groupby" style="margin-left:8px">
+    <div class="filter-label">Группировка</div>
+    <button class="filter-btn" onclick="toggleDropdown('groupby')">
+      <span id="groupByText">По системе</span>
+      <span class="arrow">▾</span>
+    </button>
+    <div class="filter-dropdown" id="dd-groupby">
+      <div class="filter-dropdown-body">
+        <div class="filter-check" onclick="setGroupBy('system')"><label>По системе (EWM/ERP/TEST/ABAP...)</label></div>
+        <div class="filter-check" onclick="setGroupBy('rank')"><label>По приоритету</label></div>
+      </div>
+    </div>
+  </div>
+  <div class="filter-group" id="fg-zoom" style="margin-left:8px">
+    <div class="filter-label">Масштаб</div>
+    <button class="filter-btn" onclick="toggleDropdown('zoom')">
+      <span id="zoomText">Месяц</span>
+      <span class="arrow">▾</span>
+    </button>
+    <div class="filter-dropdown" id="dd-zoom">
+      <div class="filter-dropdown-body">
+        <div class="filter-check" onclick="setZoom('week')"><label>Неделя (детально)</label></div>
+        <div class="filter-check" onclick="setZoom('month')"><label>Месяц (по умолчанию)</label></div>
+        <div class="filter-check" onclick="setZoom('quarter')"><label>Квартал (обзорно)</label></div>
+      </div>
+    </div>
+  </div>
+  <button class="reset-btn" onclick="resetAll()">✕ Сбросить всё</button>
+</div>
+
+<div class="milestones-bar" id="milestonesBar">
+  <button class="milestone-btn" onclick="addMilestone()">📍 + Веха</button>
+  <button class="milestone-btn" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff" onclick="openAddTaskModal()">➕ Новая задача</button>
+  <span id="milestoneChips"></span>
+</div>
+
+<div class="instructions" id="instructionsBar">⠿ — перетащите мышкой вверх/вниз, чтобы изменить порядок · перетащите сам бар — сдвинуть даты · ⇔ края бара — изменить длительность · 🔗 — создать связь между задачами · 🗑 — удалить задачу · клик по линии связи — удалить её</div>
+
+<div class="gantt-split" id="ganttWrapper" ondragover="event.preventDefault();document.getElementById('ganttWrapper').classList.add('drag-over-zone')" ondragleave="document.getElementById('ganttWrapper').classList.remove('drag-over-zone')" ondrop="handleScheduleDrop(event)">
+  <div class="gantt-left-pane" id="ganttLeftPane"><div id="ganttLeftContainer"></div></div>
+  <div class="gantt-right-pane" id="ganttRightPane"><div id="ganttRightContainer"></div></div>
+</div>
+
+<div class="backlog-section">
+  <h2>📦 Бэклог — без плановых дат <span class="cnt" id="backlogCnt"></span></h2>
+  <table class="backlog-table" id="backlogTable">
+    <thead><tr><th>Ключ</th><th>Система</th><th>Описание</th><th>Приоритет</th><th>Статус</th><th>Оценка (чд)</th><th>Исполнитель</th></tr></thead>
+    <tbody id="backlogBody"></tbody>
+  </table>
+</div>
+
+</div>
+
+<div id="calendarViewSection" class="calendar-section" style="display:none">
+  <div class="cal-controls">
+    <button class="cal-nav-btn" onclick="calNav(-1)">◀</button>
+    <span class="cal-period-label" id="calPeriodLabel"></span>
+    <button class="cal-nav-btn" onclick="calNav(1)">▶</button>
+    <button class="cal-nav-btn" onclick="calToday()">Сегодня</button>
+    <span class="cal-spacer"></span>
+    <button class="cal-period-btn" data-period="week" onclick="setCalPeriod('week')">Неделя</button>
+    <button class="cal-period-btn active" data-period="month" onclick="setCalPeriod('month')">Месяц</button>
+    <button class="cal-period-btn" data-period="quarter" onclick="setCalPeriod('quarter')">Квартал</button>
+  </div>
+  <div id="calendarGrid"></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#3b82f6"></div>Тестирование</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f59e0b"></div>Разработка</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#d97706"></div>Архитектура</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#ef4444"></div>В работе</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#94a3b8"></div>Новый</div>
+  <div class="legend-item" style="margin-left:12px"><div style="width:14px;height:10px;border-radius:3px;background:repeating-linear-gradient(135deg,#ef4444,#ef4444 3px,rgba(255,255,255,.3) 3px,rgba(255,255,255,.3) 6px);outline:1.5px solid #dc2626;outline-offset:-1px"></div>Просрочено</div>
+  <div class="legend-item"><span style="color:#dc2626;font-size:13px">│</span> Сегодня</div>
+  <div class="legend-item"><span style="color:#7c3aed;font-size:13px">◆</span> Веха</div>
+  <div class="legend-item"><span style="color:#dc2626;font-size:12px">⚑</span> Частые переносы (≥3)</div>
+</div>
+
+<div class="footer" id="footerText">Изменения сохраняются локально в браузере • Оценки в человеко-днях (1 чд = 8 часов)</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<div class="modal-overlay" id="loginOverlay" style="display:flex">
+  <div class="modal-box">
+    <h3>🔐 Вход в Jira</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:6px">Приложение работает у вас локально и обращается к Jira напрямую с вашего компьютера. Логин и пароль не используются — нужен персональный API-токен.</p>
+    <label>Адрес Jira <span class="hint">например detmir.atlassian.net</span></label>
+    <input type="text" id="lg-site" placeholder="your-domain.atlassian.net">
+    <label>Email</label>
+    <input type="text" id="lg-email" placeholder="you@company.com">
+    <label>API-токен <span class="hint">создать: id.atlassian.com/manage-profile/security/api-tokens</span></label>
+    <input type="password" id="lg-token" placeholder="Вставьте API-токен">
+    <div id="loginError" style="display:none;color:#dc2626;font-size:12px;margin-top:8px"></div>
+    <div class="modal-actions">
+      <button class="milestone-btn" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff" onclick="submitLogin()" id="loginBtn">Войти</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="filterOverlay">
+  <div class="modal-box">
+    <h3>📋 Выберите фильтр Jira</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:6px">Диаграмма построится по задачам этого сохранённого фильтра.</p>
+    <label>Поиск фильтра по названию</label>
+    <input type="text" id="filterSearch" placeholder="Начните вводить название..." oninput="onFilterSearch(this.value)">
+    <div id="filterList" style="max-height:280px;overflow-y:auto;margin-top:10px;border:1px solid #e2e8f0;border-radius:8px"></div>
+    <div id="filterError" style="display:none;color:#dc2626;font-size:12px;margin-top:8px"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="loadingOverlay">
+  <div class="modal-box" style="text-align:center">
+    <h3 id="loadingText">⏳ Загрузка задач из Jira…</h3>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addTaskModal">
+  <div class="modal-box">
+    <h3>➕ Новая задача</h3>
+    <label>Ключ задачи <span class="hint">(ПРЕФИКС-НОМЕР, префикс определяет группу — EWM/ERP/TEST/ABAP или свой, например CUSTOM-1)</span></label>
+    <input type="text" id="at-key" placeholder="CUSTOM-1">
+    <label>Название</label>
+    <input type="text" id="at-sum" placeholder="Краткое описание задачи">
+    <div class="modal-row">
+      <div>
+        <label>Исполнитель</label>
+        <input type="text" id="at-assignee" placeholder="ФИО">
+      </div>
+      <div>
+        <label>Приоритет</label>
+        <select id="at-priority">
+          <option value="Блокирует Бизнес">Блокирует Бизнес</option>
+          <option value="Критический">Критический</option>
+          <option value="Важная">Важная</option>
+          <option value="Normal" selected>Normal</option>
+          <option value="Незначительный">Незначительный</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-row">
+      <div>
+        <label>Статус</label>
+        <select id="at-status"></select>
+      </div>
+      <div>
+        <label>Оценка (чд)</label>
+        <input type="number" id="at-est" min="0.5" step="0.5" value="1">
+      </div>
+    </div>
+    <div class="modal-row">
+      <div>
+        <label>Дата начала</label>
+        <input type="date" id="at-start">
+      </div>
+      <div>
+        <label>Дата окончания</label>
+        <input type="date" id="at-end">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="reset-btn" onclick="closeAddTaskModal()">Отмена</button>
+      <button class="milestone-btn" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff" onclick="submitAddTask()">Создать</button>
+    </div>
+  </div>
+</div>
+
+<div class="storage-ok" id="storageOk">💾 Сохранено</div>
+
+<script>
+let BASE='';
+let TODAY=new Date();
+let TL_START=new Date(TODAY.getFullYear(),TODAY.getMonth()-3,1);
+let TL_END=new Date(TODAY.getFullYear(),TODAY.getMonth()+12,0);
+const SHORT_MONTHS=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+const MONTHS=SHORT_MONTHS; // сохранено для обратной совместимости мест, где используется как алиас
+const MONTHS_FULL=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const WEEKDAYS_SHORT=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+const RANK_NAMES=['Блокирует Бизнес','Критический','Важная','Normal','Незначительный'];
+const SYSTEM_MAP={EWM:'EWM',OPER:'ERP',TEST:'TEST',ABAP:'ABAP',BASIS:'BASIS'};
+const SYSTEM_ORDER=['EWM','ERP','TEST','ABAP','BASIS'];
+let STORAGE_KEY='gantt_local_overlay_default';
+
+function fmtD(sec){if(!sec)return'—';const d=sec/28800;if(d>=10)return Math.round(d)+' чд';return d.toFixed(1)+' чд';}
+function fmtDshort(sec){if(!sec)return'—';const d=sec/28800;if(d>=10)return Math.round(d);return d.toFixed(1);}
+function toISO(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+day;}
+function getISOWeek(d){
+  const date=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const dayNum=(date.getUTCDay()+6)%7;
+  date.setUTCDate(date.getUTCDate()-dayNum+3);
+  const firstThursday=new Date(Date.UTC(date.getUTCFullYear(),0,4));
+  const fdDayNum=(firstThursday.getUTCDay()+6)%7;
+  const weekNum=1+Math.round(((date-firstThursday)/86400000-3+fdDayNum)/7);
+  return weekNum;
+}
+function systemOf(key){const prefix=key.split('-')[0];return SYSTEM_MAP[prefix]||prefix;}
+function sysCssClass(sys){const s=(sys||'').toLowerCase();return['ewm','erp','test','abap','basis'].includes(s)?'sys-'+s:'sys-other';}
+
+let tasks=[];
+
+let backlog=[];
+
+let links=[]; // {from:'KEY', to:'KEY'}
+let milestones=[]; // {id, date:'YYYY-MM-DD', title}
+let manualOrder={}; // {'groupBy:groupKey': [taskKey,...]}
+let linkSource=null;
+let dragState=null;
+let taskMap={};
+let groupBy='system'; // 'system' | 'rank'
+let zoomLevel='month'; // 'week' | 'month' | 'quarter'
+let storageAvailable=true;
+let editingCell=null; // {key, field:'assignee'|'status'}
+const STATUS_OPTIONS=['Новый','В работе','В тестировании','В отделе тестирования','В отделе разработки','В отделе архитектуры','В Очереди','Готов к переносу'];
+let viewMode='gantt'; // 'gantt' | 'calendar'
+let calPeriodType='month'; // 'week' | 'month' | 'quarter'
+let calRefDate=new Date(2026,6,6);
+window.__renderedOrder={};
+
+// --- Persistence (localStorage, works fully offline in any browser) ---
+function loadState(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const data=JSON.parse(raw);
+      if(data.tasks)tasks=data.tasks;
+      if(data.backlog)backlog=data.backlog;
+      if(data.links)links=data.links;
+      if(data.milestones)milestones=data.milestones;
+      if(data.groupBy)groupBy=data.groupBy;
+      if(data.manualOrder)manualOrder=data.manualOrder;
+      if(data.zoomLevel)zoomLevel=data.zoomLevel;
+    }
+  }catch(e){
+    storageAvailable=false;
+    document.getElementById('storageInfo').style.display='none';
+    document.getElementById('storageWarning').style.display='block';
+  }
+}
+function saveState(){
+  if(!storageAvailable)return;
+  try{
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({tasks,backlog,links,milestones,groupBy,manualOrder,zoomLevel}));
+    flashSaved();
+  }catch(e){
+    storageAvailable=false;
+    document.getElementById('storageInfo').style.display='none';
+    document.getElementById('storageWarning').style.display='block';
+  }
+}
+let flashTimer=null;
+function flashSaved(){
+  const el=document.getElementById('storageOk');
+  el.style.display='block';
+  el.style.opacity='1';
+  if(flashTimer)clearTimeout(flashTimer);
+  flashTimer=setTimeout(()=>{
+    el.style.opacity='0';
+    setTimeout(()=>{el.style.display='none';},300);
+  },1000);
+}
+
+// --- View mode ---
+function setViewMode(mode){
+  viewMode=mode;
+  document.getElementById('ganttViewBtn').classList.toggle('active',mode==='gantt');
+  document.getElementById('calViewBtn').classList.toggle('active',mode==='calendar');
+  document.getElementById('ganttViewSection').style.display=(mode==='gantt')?'':'none';
+  document.getElementById('calendarViewSection').style.display=(mode==='calendar')?'':'none';
+  if(mode==='calendar')renderCalendar();
+}
+function setCalPeriod(type){
+  calPeriodType=type;
+  document.querySelectorAll('.cal-period-btn').forEach(b=>b.classList.toggle('active',b.dataset.period===type));
+  renderCalendar();
+}
+function calNav(dir){
+  if(calPeriodType==='week'){calRefDate=new Date(calRefDate.getTime()+dir*7*86400000);}
+  else if(calPeriodType==='month'){calRefDate=new Date(calRefDate.getFullYear(),calRefDate.getMonth()+dir,1);}
+  else {calRefDate=new Date(calRefDate.getFullYear(),calRefDate.getMonth()+dir*3,1);}
+  renderCalendar();
+}
+function calToday(){calRefDate=new Date(TODAY);renderCalendar();}
+
+function tasksOnDay(dateStr){
+  return tasks.filter(t=>matchFilters(t)&&t.s<=dateStr&&t.e>=dateStr);
+}
+function milestonesOnDay(dateStr){
+  return milestones.filter(m=>m.date===dateStr);
+}
+
+function buildMonthGrid(year,month,size){
+  const wrap=document.createElement('div');
+  wrap.className='cal-month'+(size==='quarter'?' cal-month-mini':'');
+  const head=document.createElement('div');
+  head.className='cal-weekdays';
+  WEEKDAYS_SHORT.forEach(w=>{const d=document.createElement('div');d.textContent=w;head.appendChild(d);});
+  wrap.appendChild(head);
+  const first=new Date(year,month,1);
+  const firstDow=(first.getDay()+6)%7;
+  const start=new Date(year,month,1-firstDow);
+  const grid=document.createElement('div');
+  grid.className='cal-grid';
+  for(let i=0;i<42;i++){
+    const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+    const dateStr=toISO(d);
+    const inMonth=d.getMonth()===month;
+    const isToday=dateStr===toISO(TODAY);
+    const cell=document.createElement('div');
+    cell.className='cal-day'+(inMonth?'':' cal-day-out')+(isToday?' cal-day-today':'');
+    const dayTasks=tasksOnDay(dateStr);
+    const dayMiles=milestonesOnDay(dateStr);
+    let chipsHtml='';
+    if(size!=='quarter'){
+      const maxShow=size==='week'?8:3;
+      dayTasks.slice(0,maxShow).forEach(t=>{
+        chipsHtml+='<div class="cal-chip" style="background:'+barColor(t.status)+'" title="'+t.key+' — '+t.sum.replace(/"/g,'&quot;')+'" onclick="window.open(\''+BASE+t.key+'\',\'_blank\')">'+t.key+'</div>';
+      });
+      if(dayTasks.length>maxShow){
+        chipsHtml+='<div class="cal-more">+'+(dayTasks.length-maxShow)+' ещё</div>';
+      }
+    } else if(dayTasks.length>0){
+      chipsHtml='<div class="cal-count-dot" title="'+dayTasks.length+' задач(и) в этот день">'+dayTasks.length+'</div>';
+    }
+    let milesHtml='';
+    dayMiles.forEach(m=>{
+      milesHtml+='<span class="cal-milestone" title="'+m.title.replace(/"/g,'&quot;')+'">◆</span>';
+    });
+    cell.innerHTML='<div class="cal-day-num">'+d.getDate()+milesHtml+'</div><div class="cal-chips">'+chipsHtml+'</div>';
+    grid.appendChild(cell);
+  }
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+function buildWeekGrid(days){
+  const wrap=document.createElement('div');
+  wrap.className='cal-week';
+  days.forEach(d=>{
+    const dateStr=toISO(d);
+    const dayTasks=tasksOnDay(dateStr);
+    const dayMiles=milestonesOnDay(dateStr);
+    const col=document.createElement('div');
+    col.className='cal-week-col'+(dateStr===toISO(TODAY)?' cal-day-today':'');
+    let milesHtml='';
+    dayMiles.forEach(m=>{milesHtml+='<div class="cal-milestone-week">◆ '+m.title+'</div>';});
+    let tasksHtml='';
+    dayTasks.forEach(t=>{
+      tasksHtml+='<div class="cal-week-task" style="border-left:3px solid '+barColor(t.status)+'" title="'+t.sum.replace(/"/g,'&quot;')+'" onclick="window.open(\''+BASE+t.key+'\',\'_blank\')"><b>'+t.key+'</b><br>'+t.sum.substring(0,44)+(t.sum.length>44?'…':'')+'</div>';
+    });
+    col.innerHTML='<div class="cal-week-head">'+WEEKDAYS_SHORT[(d.getDay()+6)%7]+' '+d.getDate()+'.'+String(d.getMonth()+1).padStart(2,'0')+'</div>'+milesHtml+tasksHtml;
+    wrap.appendChild(col);
+  });
+  return wrap;
+}
+
+function renderCalendar(){
+  const container=document.getElementById('calendarGrid');
+  container.innerHTML='';
+  const label=document.getElementById('calPeriodLabel');
+  if(calPeriodType==='week'){
+    const dow=(calRefDate.getDay()+6)%7;
+    const monday=new Date(calRefDate.getFullYear(),calRefDate.getMonth(),calRefDate.getDate()-dow);
+    const days=[...Array(7)].map((_,i)=>new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+i));
+    label.textContent=fmtDate(toISO(days[0]))+' — '+fmtDate(toISO(days[6]));
+    container.appendChild(buildWeekGrid(days));
+  } else if(calPeriodType==='month'){
+    const y=calRefDate.getFullYear(), m=calRefDate.getMonth();
+    label.textContent=MONTHS_FULL[m]+' '+y;
+    container.appendChild(buildMonthGrid(y,m,'month'));
+  } else {
+    const y=calRefDate.getFullYear();
+    const q=Math.floor(calRefDate.getMonth()/3);
+    const qMonths=[q*3,q*3+1,q*3+2];
+    label.textContent='Квартал '+(q+1)+' '+y+' ('+MONTHS_FULL[qMonths[0]]+' – '+MONTHS_FULL[qMonths[2]]+')';
+    const row=document.createElement('div');
+    row.className='cal-quarter-row';
+    qMonths.forEach(mm=>{
+      const col=document.createElement('div');
+      col.className='cal-quarter-col';
+      const title=document.createElement('div');
+      title.className='cal-quarter-title';
+      title.textContent=MONTHS_FULL[mm];
+      col.appendChild(title);
+      col.appendChild(buildMonthGrid(y,mm,'quarter'));
+      row.appendChild(col);
+    });
+    container.appendChild(row);
+  }
+}
+
+// --- Filter state ---
+const filterState={status:new Set(),assignee:new Set(),rank:new Set(),system:new Set()};
+let allValues={status:[],assignee:[],rank:[],system:[]};
+
+function statusClass(s){
+  if(s==='В тестировании'||s==='В отделе тестирования')return'st-testing';
+  if(s==='В отделе разработки')return'st-dev';
+  if(s==='В отделе архитектуры')return'st-arch';
+  if(s==='В работе')return'st-work';
+  return'st-new';
+}
+function barColor(s){
+  if(s==='В тестировании'||s==='В отделе тестирования')return'#3b82f6';
+  if(s==='В отделе разработки')return'#f59e0b';
+  if(s==='В отделе архитектуры')return'#d97706';
+  if(s==='В работе')return'#ef4444';
+  return'#94a3b8';
+}
+function renderAssigneeCell(key,assignee){
+  if(editingCell&&editingCell.key===key&&editingCell.field==='assignee'){
+    return '<input class="edit-input" list="udl-'+key+'" data-key="'+key+'" data-field="assignee" value="'+assignee.replace(/"/g,'&quot;')+'" onclick="event.stopPropagation()" oninput="onAssigneeInput(this.value)" onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\')cancelEditCell();" onblur="commitEditCell(\''+key+'\',\'assignee\',this.value)">'+
+      '<datalist id="udl-'+key+'"></datalist>';
+  }
+  return '<span class="assignee-text editable" title="'+assignee+' (клик — изменить)" onclick="startEditCell(event,\''+key+'\',\'assignee\')">'+assignee+'</span>';
+}
+function renderStatusCell(key,status,displayLabel){
+  if(editingCell&&editingCell.key===key&&editingCell.field==='status'){
+    let opts=STATUS_OPTIONS.includes(status)?STATUS_OPTIONS:[status,...STATUS_OPTIONS];
+    const optsHtml=opts.map(o=>'<option value="'+o+'"'+(o===status?' selected':'')+'>'+o+'</option>').join('');
+    return '<select class="edit-input" data-key="'+key+'" data-field="status" onclick="event.stopPropagation()" onchange="commitEditCell(\''+key+'\',\'status\',this.value)" onblur="cancelEditCell()">'+optsHtml+'</select>';
+  }
+  return '<span class="status-badge editable '+statusClass(status)+'" title="Клик — изменить статус" onclick="startEditCell(event,\''+key+'\',\'status\')">'+(displayLabel||status)+'</span>';
+}
+function priorityDot(p){
+  if(p==='Блокирует Бизнес')return'p-blocker';
+  if(p==='Критический')return'p-critical';
+  if(p==='Важная')return'p-important';
+  if(p==='Незначительный')return'p-minor';
+  return'p-normal';
+}
+function fmtDate(ds){const d=new Date(ds);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear();}
+function dayPos(d){const dt=new Date(d);return Math.max(0,Math.min(100,((dt-TL_START)/(TL_END-TL_START))*100));}
+function rankLabel(r){if(r===null||r===undefined)return'Без приоритета';return RANK_NAMES[r]||'Без приоритета';}
+function rankCssClass(r){if(r===0)return'rank-0';if(r===1)return'rank-1';if(r===2)return'rank-2';if(r===3)return'rank-3';if(r===4)return'rank-4';return'rank-4';}
+function rankKey(r){return(r===null||r===undefined)?'none':String(r);}
+
+// --- Checkbox filter logic ---
+function initFilters(){
+  const all=[...tasks,...backlog];
+  const sSet=new Set(), aSet=new Set(), rSet=new Set(), sysSet=new Set();
+  all.forEach(t=>{
+    sSet.add(t.status);
+    if(t.assignee && t.assignee!=='—') aSet.add(t.assignee);
+    rSet.add(rankKey(t.rank));
+    sysSet.add(systemOf(t.key));
+  });
+  allValues.status=[...sSet].sort();
+  allValues.assignee=[...aSet].sort();
+  allValues.rank=[...rSet].sort((a,b)=>{if(a==='none')return 1;if(b==='none')return -1;return parseFloat(a)-parseFloat(b);});
+  allValues.system=[...sysSet].sort((a,b)=>{
+    const ia=SYSTEM_ORDER.indexOf(a), ib=SYSTEM_ORDER.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
+  Object.keys(allValues).forEach(cat=>{
+    allValues[cat].forEach(v=>filterState[cat].add(v));
+    renderCheckboxes(cat);
+  });
+  if(groupBy==='rank'){
+    document.getElementById('groupByText').textContent='По приоритету';
+  }
+  const zoomLabelMap={week:'Неделя',month:'Месяц',quarter:'Квартал'};
+  document.getElementById('zoomText').textContent=zoomLabelMap[zoomLevel]||'Месяц';
+}
+
+function renderCheckboxes(cat){
+  const body=document.getElementById('cb-'+cat);
+  body.innerHTML='';
+  allValues[cat].forEach(v=>{
+    const div=document.createElement('div');
+    div.className='filter-check';
+    const id='chk-'+cat+'-'+v.replace(/\s/g,'_');
+    const displayLabel=cat==='rank'?rankLabel(v==='none'?null:parseFloat(v)):v;
+    div.innerHTML='<input type="checkbox" id="'+id+'" value="'+v+'" '+(filterState[cat].has(v)?'checked':'')+'><label for="'+id+'">'+displayLabel+'</label>';
+    div.querySelector('input').addEventListener('change',function(){
+      if(this.checked) filterState[cat].add(v);
+      else filterState[cat].delete(v);
+      updateBtnText(cat);
+      buildGantt();
+    });
+    body.appendChild(div);
+  });
+  updateBtnText(cat);
+}
+
+function updateBtnText(cat){
+  const btn=document.querySelector('#fg-'+cat+' .filter-btn');
+  const textEl=btn.querySelector('.filter-btn-text');
+  const total=allValues[cat].length;
+  const selected=filterState[cat].size;
+  const oldBadge=btn.querySelector('.count-badge');
+  if(oldBadge) oldBadge.remove();
+  if(selected===total){
+    textEl.textContent='Все';
+    btn.classList.remove('active');
+  } else if(selected===0){
+    textEl.textContent='Нет';
+    btn.classList.add('active');
+    const badge=document.createElement('span');
+    badge.className='count-badge';badge.textContent='0';badge.style.background='#ef4444';
+    btn.insertBefore(badge,btn.querySelector('.arrow'));
+  } else {
+    textEl.textContent=selected+' из '+total;
+    btn.classList.add('active');
+    const badge=document.createElement('span');
+    badge.className='count-badge';badge.textContent=selected;
+    btn.insertBefore(badge,btn.querySelector('.arrow'));
+  }
+  const toggleBtn=document.querySelector('#dd-'+cat+' .filter-toggle-all');
+  if(toggleBtn) toggleBtn.textContent=selected===total?'Снять все':'Выбрать все';
+}
+
+function toggleDropdown(cat){
+  const dd=document.getElementById('dd-'+cat);
+  const isOpen=dd.classList.contains('open');
+  document.querySelectorAll('.filter-dropdown').forEach(d=>d.classList.remove('open'));
+  if(!isOpen) dd.classList.add('open');
+}
+
+function toggleAll(cat){
+  const total=allValues[cat].length;
+  const selected=filterState[cat].size;
+  if(selected===total) filterState[cat].clear();
+  else allValues[cat].forEach(v=>filterState[cat].add(v));
+  renderCheckboxes(cat);
+  buildGantt();
+}
+
+function setGroupBy(mode){
+  groupBy=mode;
+  document.getElementById('groupByText').textContent=(mode==='system')?'По системе':'По приоритету';
+  document.getElementById('dd-groupby').classList.remove('open');
+  buildGantt();
+  saveState();
+}
+
+function setZoom(z){
+  zoomLevel=z;
+  const labelMap={week:'Неделя',month:'Месяц',quarter:'Квартал'};
+  document.getElementById('zoomText').textContent=labelMap[z];
+  document.getElementById('dd-zoom').classList.remove('open');
+  buildGantt();
+  saveState();
+}
+
+function getTimeColumns(zoom){
+  const cols=[];
+  if(zoom==='month'){
+    let cur=new Date(TL_START.getFullYear(),TL_START.getMonth(),1);
+    let i=0;
+    while(cur<TL_END){
+      const next=new Date(cur.getFullYear(),cur.getMonth()+1,1);
+      const segStart=new Date(Math.max(cur.getTime(),TL_START.getTime()));
+      const segEnd=new Date(Math.min(next.getTime(),TL_END.getTime()));
+      cols.push({label:SHORT_MONTHS[cur.getMonth()],start:segStart,end:segEnd});
+      cur=next;i++;
+    }
+  } else if(zoom==='week'){
+    let cur=new Date(TL_START.getFullYear(),TL_START.getMonth(),TL_START.getDate());
+    const dow=(cur.getDay()+6)%7;
+    cur=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()-dow);
+    while(cur<TL_END){
+      const next=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+7);
+      const segStart=new Date(Math.max(cur.getTime(),TL_START.getTime()));
+      const segEnd=new Date(Math.min(next.getTime(),TL_END.getTime()));
+      const label=String(getISOWeek(segStart));
+      cols.push({label,start:segStart,end:segEnd});
+      cur=next;
+    }
+  } else {
+    let cur=new Date(TL_START.getFullYear(),Math.floor(TL_START.getMonth()/3)*3,1);
+    while(cur<TL_END){
+      const next=new Date(cur.getFullYear(),cur.getMonth()+3,1);
+      const q=Math.floor(cur.getMonth()/3)+1;
+      const segStart=new Date(Math.max(cur.getTime(),TL_START.getTime()));
+      const segEnd=new Date(Math.min(next.getTime(),TL_END.getTime()));
+      cols.push({label:'Q'+q+' '+cur.getFullYear(),start:segStart,end:segEnd});
+      cur=next;
+    }
+  }
+  return cols;
+}
+function colWidthPct(c){return Math.max(dayPos(c.end)-dayPos(c.start),0.1);}
+function buildHeaderColsHtml(cols){
+  return cols.map(c=>'<div class="month-h" style="flex:none;width:'+colWidthPct(c)+'%">'+c.label+'</div>').join('');
+}
+function buildGridColsHtml(cols){
+  return cols.map(c=>'<div class="month-col" style="flex:none;width:'+colWidthPct(c)+'%"></div>').join('');
+}
+function ganttMinWidth(cols){
+  const perCol=(zoomLevel==='week')?34:(zoomLevel==='quarter')?170:78;
+  return 860+cols.length*perCol;
+}
+
+function resetAll(){
+  Object.keys(allValues).forEach(cat=>{
+    allValues[cat].forEach(v=>filterState[cat].add(v));
+    renderCheckboxes(cat);
+  });
+  buildGantt();
+}
+
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.filter-group')) document.querySelectorAll('.filter-dropdown').forEach(d=>d.classList.remove('open'));
+});
+
+function matchFilters(t){
+  if(!filterState.status.has(t.status))return false;
+  const aKey=(t.assignee && t.assignee!=='—')?t.assignee:null;
+  if(aKey && !filterState.assignee.has(aKey))return false;
+  if(!aKey && filterState.assignee.size===0)return false;
+  if(!filterState.rank.has(rankKey(t.rank)))return false;
+  if(!filterState.system.has(systemOf(t.key)))return false;
+  return true;
+}
+
+function buildCards(filtered){
+  const c=document.getElementById('cards');
+  const counts={work:0,test:0,dev:0,neww:0};
+  [...filtered,...backlog.filter(matchFilters)].forEach(t=>{
+    if(t.status==='В работе')counts.work++;
+    else if(t.status==='В тестировании'||t.status==='В отделе тестирования')counts.test++;
+    else if(t.status==='В отделе разработки'||t.status==='В отделе архитектуры')counts.dev++;
+    else counts.neww++;
+  });
+  c.innerHTML=
+    '<div class="card red"><div class="num">'+counts.work+'</div><div class="lbl">В работе</div></div>'+
+    '<div class="card blue"><div class="num">'+counts.test+'</div><div class="lbl">Тестирование</div></div>'+
+    '<div class="card orange"><div class="num">'+counts.dev+'</div><div class="lbl">Разработка / Арх</div></div>'+
+    '<div class="card gray"><div class="num">'+counts.neww+'</div><div class="lbl">Новый / В очереди</div></div>';
+}
+
+// --- Delete ---
+function handleDelete(e,key,isBacklog){
+  e.stopPropagation();
+  if(!confirm('Удалить задачу '+key+'?'))return;
+  if(isBacklog){
+    backlog=backlog.filter(b=>b.key!==key);
+  } else {
+    tasks=tasks.filter(t=>t.key!==key);
+    links=links.filter(l=>l.from!==key&&l.to!==key);
+  }
+  buildGantt();
+  saveState();
+}
+
+// --- Drag task from backlog into the Gantt to schedule it ---
+function handleBacklogDragStart(e,key){
+  e.dataTransfer.setData('text/plain',key);
+  e.dataTransfer.effectAllowed='move';
+}
+function handleScheduleDrop(e){
+  e.preventDefault();
+  document.getElementById('ganttWrapper').classList.remove('drag-over-zone');
+  const key=e.dataTransfer.getData('text/plain');
+  if(!key)return;
+  const idx=backlog.findIndex(b=>b.key===key);
+  if(idx<0)return;
+  const b=backlog[idx];
+  const todayStr=toISO(TODAY);
+  let startStr=prompt('Дата начала для '+key+' (ГГГГ-ММ-ДД):',todayStr);
+  if(startStr===null)return;
+  const sD=new Date(startStr+'T00:00:00');
+  if(isNaN(sD.getTime())){alert('Некорректная дата начала.');return;}
+  const defaultDays=Math.max(Math.round((b.est||28800)/28800),1);
+  const defaultEnd=new Date(sD.getTime()+defaultDays*86400000);
+  let endStr=prompt('Дата окончания для '+key+' (ГГГГ-ММ-ДД):',toISO(defaultEnd));
+  if(endStr===null)return;
+  const eD=new Date(endStr+'T00:00:00');
+  if(isNaN(eD.getTime())||eD<sD){alert('Некорректная дата окончания.');return;}
+  backlog.splice(idx,1);
+  tasks.push({key:b.key,sum:b.sum,s:toISO(sD),e:toISO(eD),status:b.status,assignee:b.assignee,rank:b.rank,priority:b.priority,type:b.type,labels:b.labels,spent:0,est:b.est,rem:b.est,updated:b.updated,flagged:false,custom:b.custom||false});
+  initFilters();
+  buildGantt();
+  saveState();
+}
+
+// --- Add a brand-new task manually ---
+function openAddTaskModal(){
+  document.getElementById('addTaskModal').style.display='flex';
+  document.getElementById('at-key').value='';
+  document.getElementById('at-sum').value='';
+  document.getElementById('at-assignee').value='';
+  document.getElementById('at-start').value=toISO(TODAY);
+  document.getElementById('at-end').value=toISO(new Date(TODAY.getTime()+3*86400000));
+  document.getElementById('at-est').value='1';
+  const statusSel=document.getElementById('at-status');
+  statusSel.innerHTML=STATUS_OPTIONS.map(o=>'<option value="'+o+'">'+o+'</option>').join('');
+  document.getElementById('at-key').focus();
+}
+function closeAddTaskModal(){
+  document.getElementById('addTaskModal').style.display='none';
+}
+function submitAddTask(){
+  const key=document.getElementById('at-key').value.trim().toUpperCase();
+  const sum=document.getElementById('at-sum').value.trim();
+  const assignee=document.getElementById('at-assignee').value.trim()||'—';
+  const priority=document.getElementById('at-priority').value;
+  const status=document.getElementById('at-status').value;
+  const startStr=document.getElementById('at-start').value;
+  const endStr=document.getElementById('at-end').value;
+  const estDays=parseFloat(document.getElementById('at-est').value)||1;
+  if(!key||!/^[A-ZА-Я0-9]+-[A-ZА-Я0-9]+$/i.test(key)){
+    alert('Укажите ключ в формате ПРЕФИКС-НОМЕР, например CUSTOM-1. Префикс определяет группу на диаграмме (EWM/ERP/TEST/ABAP или свой).');
+    return;
+  }
+  if(!sum){alert('Укажите название задачи.');return;}
+  if(tasks.some(t=>t.key===key)||backlog.some(b=>b.key===key)){
+    alert('Задача с ключом '+key+' уже существует.');
+    return;
+  }
+  const sD=new Date(startStr+'T00:00:00');
+  const eD=new Date(endStr+'T00:00:00');
+  if(isNaN(sD.getTime())||isNaN(eD.getTime())||eD<sD){
+    alert('Проверьте даты начала/окончания.');
+    return;
+  }
+  const rankMap={'Блокирует Бизнес':0,'Критический':1,'Важная':2,'Normal':3,'Незначительный':4};
+  tasks.push({
+    key,sum,s:toISO(sD),e:toISO(eD),status,assignee,
+    rank:rankMap[priority]!==undefined?rankMap[priority]:3,
+    priority,type:'Внесено вручную',labels:'',
+    spent:0,est:estDays*28800,rem:estDays*28800,
+    updated:toISO(TODAY),flagged:false,custom:true
+  });
+  closeAddTaskModal();
+  initFilters();
+  buildGantt();
+  saveState();
+}
+let userSuggestionMap={};
+let userSearchTimer=null;
+function onAssigneeInput(value){
+  if(userSearchTimer)clearTimeout(userSearchTimer);
+  userSearchTimer=setTimeout(async ()=>{
+    if(!value||value.length<2)return;
+    try{
+      const r=await fetch('/api/users?q='+encodeURIComponent(value));
+      const data=await r.json();
+      const dl=document.querySelector('#editingDatalist')||document.querySelector('datalist[id^="udl-"]');
+      if(!dl)return;
+      dl.innerHTML='';
+      (data.users||[]).forEach(u=>{
+        userSuggestionMap[u.displayName]=u.accountId;
+        const opt=document.createElement('option');
+        opt.value=u.displayName;
+        dl.appendChild(opt);
+      });
+    }catch(e){/* тихо игнорируем ошибки автодополнения */}
+  },250);
+}
+function showSyncToast(msg,isError){
+  let el=document.getElementById('syncToast');
+  if(!el){
+    el=document.createElement('div');
+    el.id='syncToast';
+    el.style.cssText='position:fixed;bottom:20px;right:20px;padding:8px 16px;border-radius:8px;font-size:12px;z-index:6000;box-shadow:0 2px 10px rgba(0,0,0,.2);transition:opacity .3s';
+    document.body.appendChild(el);
+  }
+  el.textContent=msg;
+  el.style.background=isError?'#dc2626':'#16a34a';
+  el.style.color='#fff';
+  el.style.opacity='1';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{el.style.opacity='0';},2500);
+}
+function findAnyTask(key){
+  return taskMap[key]||tasks.find(t=>t.key===key)||backlog.find(b=>b.key===key);
+}
+function startEditCell(e,key,field){
+  e.stopPropagation();
+  editingCell={key,field};
+  buildGantt();
+  setTimeout(()=>{
+    const el=document.querySelector('.edit-input[data-key="'+CSS.escape(key)+'"][data-field="'+field+'"]');
+    if(el){el.focus();if(el.select)el.select();}
+  },0);
+}
+async function commitEditCell(key,field,value){
+  const t=findAnyTask(key);
+  editingCell=null;
+  if(!t){buildGantt();return;}
+  if(field==='assignee'){
+    const newVal=value.trim()||'—';
+    const changed=newVal!==t.assignee;
+    t.assignee=newVal;
+    buildGantt();
+    saveState();
+    if(changed&&!t.custom){
+      const accountId=userSuggestionMap[newVal];
+      if(accountId){
+        try{
+          const r=await fetch('/api/issues/'+encodeURIComponent(key)+'/assignee',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId})});
+          const data=await r.json();
+          if(r.ok)showSyncToast('✓ Исполнитель обновлён в Jira');
+          else showSyncToast('⚠ Jira: '+(data.error||'ошибка синхронизации'),true);
+        }catch(e){showSyncToast('⚠ Не удалось связаться с сервером',true);}
+      } else if(newVal!=='—'){
+        showSyncToast('Изменено только локально — выберите пользователя из списка, чтобы синхронизировать с Jira',true);
+      }
+    }
+  } else if(field==='status'){
+    const changed=value!==t.status;
+    t.status=value;
+    buildGantt();
+    saveState();
+    if(changed&&!t.custom){
+      try{
+        const r=await fetch('/api/issues/'+encodeURIComponent(key)+'/status',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({statusName:value})});
+        const data=await r.json();
+        if(r.ok)showSyncToast('✓ Статус обновлён в Jira');
+        else showSyncToast('⚠ Jira: '+(data.error||'ошибка синхронизации'),true);
+      }catch(e){showSyncToast('⚠ Не удалось связаться с сервером',true);}
+    }
+  }
+}
+function cancelEditCell(){
+  editingCell=null;
+  buildGantt();
+}
+
+// --- Vertical reorder via real mouse/touch drag ---
+let rowDragState=null;
+function startRowDrag(e,ordKey,key){
+  if(e.pointerType==='mouse' && e.button!==0)return;
+  e.preventDefault();
+  e.stopPropagation();
+  const handle=e.currentTarget;
+  const tr=handle.closest('tr');
+  const table=tr.closest('table');
+  rowDragState={ordKey,key,tr,table,handle,pointerId:e.pointerId};
+  tr.classList.add('dragging-row');
+  try{handle.setPointerCapture(e.pointerId);}catch(err){}
+  handle.addEventListener('pointermove',onRowDragMove);
+  handle.addEventListener('pointerup',onRowDragEnd);
+  handle.addEventListener('pointercancel',onRowDragEnd);
+}
+function onRowDragMove(e){
+  if(!rowDragState)return;
+  const table=rowDragState.table;
+  const tr=rowDragState.tr;
+  const rows=Array.from(table.querySelectorAll('tr')).filter(r=>r!==tr);
+  rows.forEach(r=>r.classList.remove('drop-target-above'));
+  let targetRow=null;
+  for(const r of rows){
+    const rect=r.getBoundingClientRect();
+    const mid=rect.top+rect.height/2;
+    if(e.clientY<mid){targetRow=r;break;}
+  }
+  if(targetRow){targetRow.classList.add('drop-target-above');}
+  rowDragState.targetRow=targetRow;
+}
+function onRowDragEnd(e){
+  if(!rowDragState)return;
+  const{handle,tr,table,ordKey,targetRow}=rowDragState;
+  handle.removeEventListener('pointermove',onRowDragMove);
+  handle.removeEventListener('pointerup',onRowDragEnd);
+  handle.removeEventListener('pointercancel',onRowDragEnd);
+  try{handle.releasePointerCapture(rowDragState.pointerId);}catch(err){}
+  tr.classList.remove('dragging-row');
+  table.querySelectorAll('.drop-target-above').forEach(r=>r.classList.remove('drop-target-above'));
+  if(targetRow&&targetRow!==tr){
+    table.insertBefore(tr,targetRow);
+  } else if(!targetRow){
+    table.appendChild(tr);
+  }
+  const newOrder=Array.from(table.querySelectorAll('tr')).map(r=>r.dataset.key);
+  manualOrder[ordKey]=newOrder;
+  window.__ganttSuppressClick=true;
+  setTimeout(()=>{window.__ganttSuppressClick=false;},0);
+  rowDragState=null;
+  buildGantt();
+  saveState();
+}
+
+// --- Linking ---
+function updateLinkModeUI(){
+  document.querySelectorAll('.link-btn').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.linkkey===linkSource);
+  });
+  const bar=document.getElementById('instructionsBar');
+  if(linkSource){
+    bar.textContent='🔗 Связь: выбрана '+linkSource+'. Кликните 🔗 у второй задачи, чтобы создать связь (или снова на 🔗 у '+linkSource+', чтобы отменить).';
+    bar.style.color='#2563eb';
+  } else {
+    bar.textContent='⠿ — перетащите мышкой вверх/вниз, чтобы изменить порядок · перетащите сам бар — сдвинуть даты · ⇔ края бара — изменить длительность · 🔗 — создать связь между задачами · 🗑 — удалить задачу · клик по линии связи — удалить её';
+    bar.style.color='#94a3b8';
+  }
+}
+function handleLinkClick(e,key){
+  e.stopPropagation();
+  if(linkSource===null){
+    linkSource=key;
+    updateLinkModeUI();
+  } else if(linkSource===key){
+    linkSource=null;
+    updateLinkModeUI();
+  } else {
+    if(!links.some(l=>l.from===linkSource&&l.to===key)){
+      links.push({from:linkSource,to:key});
+    }
+    linkSource=null;
+    buildGantt();
+    saveState();
+  }
+}
+
+// --- Milestones ---
+function addMilestone(){
+  const title=prompt('Название вехи (например: "Начало интеграционного тестирования"):');
+  if(title===null||title.trim()==='')return;
+  let dateStr=prompt('Дата вехи (ГГГГ-ММ-ДД):', toISO(TODAY));
+  if(dateStr===null)return;
+  const d=new Date(dateStr+'T00:00:00');
+  if(isNaN(d.getTime())){
+    alert('Некорректная дата. Используйте формат ГГГГ-ММ-ДД.');
+    return;
+  }
+  milestones.push({id:'m'+Date.now()+Math.floor(Math.random()*1000),date:toISO(d),title:title.trim()});
+  buildGantt();
+  saveState();
+}
+function removeMilestone(id){
+  const m=milestones.find(x=>x.id===id);
+  if(!m)return;
+  if(!confirm('Удалить веху «'+m.title+'» ('+fmtDate(m.date)+')?'))return;
+  milestones=milestones.filter(x=>x.id!==id);
+  buildGantt();
+  saveState();
+}
+function renderMilestoneChips(){
+  const el=document.getElementById('milestoneChips');
+  el.innerHTML='';
+  milestones.slice().sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(m=>{
+    const chip=document.createElement('span');
+    chip.className='milestone-chip';
+    chip.innerHTML='◆ '+m.title+' ('+fmtDate(m.date)+') <span class="mx" onclick="removeMilestone(\''+m.id+'\')">✕</span>';
+    el.appendChild(chip);
+  });
+}
+
+// --- Drag to move / resize (Pointer Events + capture: robust in iframes and touch) ---
+function startMove(e,key){
+  if(e.pointerType==='mouse' && e.button!==0)return;
+  e.preventDefault();
+  const bar=e.currentTarget;
+  const cell=bar.parentElement;
+  const rect=cell.getBoundingClientRect();
+  const t=taskMap[key];
+  if(!t)return;
+  dragState={type:'move',key,startX:e.clientX,cellWidth:rect.width,origS:new Date(t.s+'T00:00:00'),origE:new Date(t.e+'T00:00:00'),moved:false,el:bar,pointerId:e.pointerId};
+  try{bar.setPointerCapture(e.pointerId);}catch(err){}
+  bar.addEventListener('pointermove',onDragMove);
+  bar.addEventListener('pointerup',onDragEnd);
+  bar.addEventListener('pointercancel',onDragEnd);
+}
+function startResize(e,key,side){
+  e.stopPropagation();
+  e.preventDefault();
+  const handle=e.currentTarget;
+  const bar=handle.parentElement;
+  const cell=bar.parentElement;
+  const rect=cell.getBoundingClientRect();
+  const t=taskMap[key];
+  if(!t)return;
+  dragState={type:'resize-'+side,key,startX:e.clientX,cellWidth:rect.width,origS:new Date(t.s+'T00:00:00'),origE:new Date(t.e+'T00:00:00'),moved:false,el:handle,pointerId:e.pointerId};
+  try{handle.setPointerCapture(e.pointerId);}catch(err){}
+  handle.addEventListener('pointermove',onDragMove);
+  handle.addEventListener('pointerup',onDragEnd);
+  handle.addEventListener('pointercancel',onDragEnd);
+}
+function onDragMove(e){
+  if(!dragState)return;
+  const dx=e.clientX-dragState.startX;
+  if(Math.abs(dx)>3)dragState.moved=true;
+  const deltaMs=(dx/dragState.cellWidth)*(TL_END-TL_START);
+  const t=taskMap[dragState.key];
+  if(!t)return;
+  const DAY=86400000;
+  if(dragState.type==='move'){
+    let newS=new Date(dragState.origS.getTime()+deltaMs);
+    let newE=new Date(dragState.origE.getTime()+deltaMs);
+    if(newS<TL_START){const shift=TL_START-newS;newS=new Date(newS.getTime()+shift);newE=new Date(newE.getTime()+shift);}
+    if(newE>TL_END){const shift=newE-TL_END;newS=new Date(newS.getTime()-shift);newE=new Date(newE.getTime()-shift);}
+    t.s=toISO(newS);t.e=toISO(newE);
+  } else if(dragState.type==='resize-left'){
+    let newS=new Date(dragState.origS.getTime()+deltaMs);
+    const maxS=new Date(dragState.origE.getTime()-DAY);
+    if(newS>maxS)newS=maxS;
+    if(newS<TL_START)newS=TL_START;
+    t.s=toISO(newS);
+  } else if(dragState.type==='resize-right'){
+    let newE=new Date(dragState.origE.getTime()+deltaMs);
+    const minE=new Date(dragState.origS.getTime()+DAY);
+    if(newE<minE)newE=minE;
+    if(newE>TL_END)newE=TL_END;
+    t.e=toISO(newE);
+  }
+  renderBarPosition(dragState.key);
+}
+function onDragEnd(e){
+  if(!dragState)return;
+  const el=dragState.el;
+  el.removeEventListener('pointermove',onDragMove);
+  el.removeEventListener('pointerup',onDragEnd);
+  el.removeEventListener('pointercancel',onDragEnd);
+  try{el.releasePointerCapture(dragState.pointerId);}catch(err){}
+  if(dragState.moved){
+    window.__ganttSuppressClick=true;
+    setTimeout(()=>{window.__ganttSuppressClick=false;},0);
+    buildGantt();
+    saveState();
+  }
+  dragState=null;
+}
+function renderBarPosition(key){
+  const t=taskMap[key];
+  if(!t)return;
+  document.querySelectorAll('.bar[data-key="'+key+'"]').forEach(bar=>{
+    const leftPct=dayPos(t.s+'T00:00:00'),rightPct=dayPos(t.e+'T00:00:00');
+    const widthPct=Math.max(rightPct-leftPct,0.8);
+    bar.style.left=leftPct+'%';
+    bar.style.width=widthPct+'%';
+    const overdue=new Date(t.e+'T00:00:00')<TODAY;
+    bar.classList.toggle('overdue',overdue);
+  });
+  drawLinks();
+  drawMilestones();
+}
+
+// --- Links overlay drawing ---
+function drawLinks(){
+  const container=document.getElementById('ganttRightContainer');
+  if(!container)return;
+  container.style.position='relative';
+  let svg=document.getElementById('linksSvg');
+  if(!svg){
+    svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.id='linksSvg';
+    svg.style.position='absolute';
+    svg.style.top='0';
+    svg.style.left='0';
+    svg.style.pointerEvents='none';
+    svg.style.overflow='visible';
+    container.appendChild(svg);
+    const defs=document.createElementNS(svg.namespaceURI,'defs');
+    defs.innerHTML='<marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8"/></marker>';
+    svg.appendChild(defs);
+  } else {
+    [...svg.querySelectorAll('path.linkpath')].forEach(p=>p.remove());
+  }
+  svg.setAttribute('width',container.scrollWidth);
+  svg.setAttribute('height',container.scrollHeight);
+  const contRect=container.getBoundingClientRect();
+  links.forEach((link,idx)=>{
+    const fromBar=container.querySelector('.bar[data-key="'+link.from+'"]');
+    const toBar=container.querySelector('.bar[data-key="'+link.to+'"]');
+    if(!fromBar||!toBar)return;
+    const fr=fromBar.getBoundingClientRect();
+    const tr=toBar.getBoundingClientRect();
+    const x1=fr.right-contRect.left;
+    const y1=fr.top-contRect.top+fr.height/2;
+    const x2=tr.left-contRect.left;
+    const y2=tr.top-contRect.top+tr.height/2;
+    let d;
+    if(x2>x1+20){
+      const midX=x1+16;
+      d='M'+x1+','+y1+' H'+midX+' V'+y2+' H'+(x2-1);
+    } else {
+      const dropY=Math.max(y1,y2)+14;
+      d='M'+x1+','+y1+' H'+(x1+10)+' V'+dropY+' H'+(x2-10)+' V'+y2+' H'+(x2-1);
+    }
+    const path=document.createElementNS(svg.namespaceURI,'path');
+    path.setAttribute('d',d);
+    path.setAttribute('class','linkpath');
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke','#94a3b8');
+    path.setAttribute('stroke-width','1.5');
+    path.setAttribute('marker-end','url(#arrowhead)');
+    path.style.pointerEvents='auto';
+    path.addEventListener('click',()=>{
+      if(confirm('Удалить связь '+link.from+' → '+link.to+'?')){
+        links.splice(idx,1);
+        drawLinks();
+        saveState();
+      }
+    });
+    svg.appendChild(path);
+  });
+}
+
+// --- Milestones overlay drawing ---
+function drawMilestones(){
+  const container=document.getElementById('ganttRightContainer');
+  if(!container)return;
+  let overlay=document.getElementById('milestonesOverlay');
+  if(overlay)overlay.remove();
+  if(milestones.length===0)return;
+  const anyCell=container.querySelector('.chart-cell');
+  if(!anyCell)return;
+  const cellRect=anyCell.getBoundingClientRect();
+  const contRect=container.getBoundingClientRect();
+  const offsetX=cellRect.left-contRect.left;
+  const cellWidth=cellRect.width;
+  overlay=document.createElement('div');
+  overlay.id='milestonesOverlay';
+  overlay.style.position='absolute';
+  overlay.style.top='0';
+  overlay.style.left='0';
+  overlay.style.width='100%';
+  overlay.style.height=container.scrollHeight+'px';
+  overlay.style.pointerEvents='none';
+  milestones.forEach(m=>{
+    const pct=dayPos(m.date+'T00:00:00');
+    const x=offsetX+(pct/100)*cellWidth;
+    const line=document.createElement('div');
+    line.className='milestone-line';
+    line.style.left=x+'px';
+    line.style.height=container.scrollHeight+'px';
+    overlay.appendChild(line);
+    const marker=document.createElement('div');
+    marker.className='milestone-marker';
+    marker.style.left=x+'px';
+    marker.style.pointerEvents='auto';
+    marker.title=m.title+' — '+fmtDate(m.date);
+    marker.onclick=()=>removeMilestone(m.id);
+    overlay.appendChild(marker);
+  });
+  container.appendChild(overlay);
+}
+
+function buildGantt(){
+  taskMap={};
+  tasks.forEach(t=>taskMap[t.key]=t);
+
+  const filtered=tasks.filter(matchFilters);
+  buildCards(filtered);
+
+  const leftContainer=document.getElementById('ganttLeftContainer');
+  const rightContainer=document.getElementById('ganttRightContainer');
+  leftContainer.innerHTML='';
+  rightContainer.innerHTML='';
+
+  const groups=new Map();
+  filtered.forEach(t=>{
+    const gk=(groupBy==='system')?systemOf(t.key):rankKey(t.rank);
+    if(!groups.has(gk))groups.set(gk,[]);
+    groups.get(gk).push(t);
+  });
+
+  let sortedGroups;
+  if(groupBy==='system'){
+    sortedGroups=[...groups.keys()].sort((a,b)=>{
+      const ia=SYSTEM_ORDER.indexOf(a), ib=SYSTEM_ORDER.indexOf(b);
+      return (ia<0?99:ia)-(ib<0?99:ib);
+    });
+  } else {
+    sortedGroups=[...groups.keys()].sort((a,b)=>{
+      if(a==='none')return 1;if(b==='none')return -1;return parseFloat(a)-parseFloat(b);
+    });
+  }
+
+  if(sortedGroups.length===0){
+    leftContainer.innerHTML='<div style="padding:40px;text-align:center;color:#94a3b8;font-size:14px">Нет задач</div>';
+    rightContainer.innerHTML='';
+  }
+
+  const timeCols=getTimeColumns(zoomLevel);
+  const headerColsHtml=buildHeaderColsHtml(timeCols);
+  const gridColsHtml=buildGridColsHtml(timeCols);
+  const tableMinWidth=ganttMinWidth(timeCols);
+  const FIXED_COLS_WIDTH=850;
+  const chartColWidth=Math.max(tableMinWidth-FIXED_COLS_WIDTH,200);
+
+  sortedGroups.forEach(gk=>{
+    let items=groups.get(gk);
+    if(groupBy==='system'){
+      items.sort((a,b)=>(a.rank-b.rank)||(new Date(a.s)-new Date(b.s)));
+    } else {
+      items.sort((a,b)=>new Date(a.s)-new Date(b.s));
+    }
+
+    const ordKey=groupBy+':'+gk;
+    if(manualOrder[ordKey]){
+      const idxMap={};
+      manualOrder[ordKey].forEach((k,i)=>{idxMap[k]=i;});
+      items=items.slice().sort((a,b)=>{
+        const ia=(a.key in idxMap)?idxMap[a.key]:Infinity;
+        const ib=(b.key in idxMap)?idxMap[b.key]:Infinity;
+        return ia-ib;
+      });
+    }
+    window.__renderedOrder[ordKey]=items.map(t=>t.key);
+
+    let titleClass, titleText;
+    if(groupBy==='system'){
+      titleClass=sysCssClass(gk);
+      titleText=gk;
+    } else {
+      const rkNum=gk==='none'?null:parseFloat(gk);
+      titleClass=rankCssClass(rkNum);
+      titleText=rankLabel(rkNum);
+    }
+
+    // LEFT section: real title + info table (order/key/summary/assignee/status/estimate)
+    const leftSection=document.createElement('div');
+    const sTitle=document.createElement('div');
+    sTitle.className='section-title '+titleClass;
+    sTitle.innerHTML=titleText+' <span class="badge">'+items.length+'</span>';
+    leftSection.appendChild(sTitle);
+    const thSpacer=document.createElement('div');
+    thSpacer.className='timeline-header-spacer';
+    leftSection.appendChild(thSpacer);
+
+    const leftTable=document.createElement('table');
+    leftTable.className='gantt-table';
+    leftTable.style.width=FIXED_COLS_WIDTH+'px';
+    const leftColgroup=document.createElement('colgroup');
+    [30,150,280,170,150,70].forEach(w=>{
+      const col=document.createElement('col');
+      col.style.width=w+'px';
+      leftColgroup.appendChild(col);
+    });
+    leftTable.appendChild(leftColgroup);
+
+    // RIGHT section: title spacer + real timeline header + chart-only table
+    const rightSection=document.createElement('div');
+    const titleSpacer=document.createElement('div');
+    titleSpacer.className='section-title-spacer';
+    rightSection.appendChild(titleSpacer);
+    const tlh=document.createElement('div');
+    tlh.className='timeline-header';
+    tlh.style.paddingLeft='0';
+    tlh.style.width=chartColWidth+'px';
+    tlh.innerHTML=headerColsHtml;
+    rightSection.appendChild(tlh);
+
+    const rightTable=document.createElement('table');
+    rightTable.className='gantt-table';
+    rightTable.style.width=chartColWidth+'px';
+    const rightColgroup=document.createElement('colgroup');
+    const rcol=document.createElement('col');
+    rcol.style.width=chartColWidth+'px';
+    rightColgroup.appendChild(rcol);
+    rightTable.appendChild(rightColgroup);
+
+    items.forEach((t)=>{
+      const endD=new Date(t.e+'T00:00:00');
+      const overdue=endD<TODAY;
+      const leftPct=dayPos(t.s+'T00:00:00');
+      const rightPct=dayPos(t.e+'T00:00:00');
+      const widthPct=Math.max(rightPct-leftPct,0.8);
+      const todayPct=dayPos(TODAY);
+      const bc=barColor(t.status);
+      const statusShort=t.status.length>22?t.status.substring(0,20)+'…':t.status;
+      const flagClass=t.flagged?' flagged':'';
+      const estDisplay=fmtDshort(t.est);
+      const linkActiveClass=(linkSource===t.key)?' active':'';
+      const sysLabel=(groupBy!=='system')?('<span class="sys-badge '+sysCssClass(systemOf(t.key))+'">'+systemOf(t.key)+'</span>'):'';
+      const keyHtml=t.custom?('<span class="key-link" style="cursor:default;color:#0f172a" title="Задача создана вручную, не в Jira">'+t.key+' ✎</span>'):('<a class="key-link" href="'+BASE+t.key+'" target="_blank" onclick="event.stopPropagation()">'+t.key+'</a>');
+      const ttData=JSON.stringify({k:t.key,s:fmtDate(t.s),e:fmtDate(t.e),st:t.status,a:t.assignee,p:t.priority,sm:t.sum,r:rankLabel(t.rank),tp:t.type,u:t.updated||'',labels:t.labels||'',est:fmtD(t.est),spent:fmtD(t.spent),rem:fmtD(t.rem),sys:systemOf(t.key)});
+
+      const rowClickHandler=()=>{
+        if(window.__ganttSuppressClick){window.__ganttSuppressClick=false;return;}
+        if(t.custom)return;
+        window.open(BASE+t.key,'_blank');
+      };
+
+      const ltr=document.createElement('tr');
+      ltr.className='task-row';
+      ltr.dataset.key=t.key;
+      ltr.onclick=rowClickHandler;
+      ltr.innerHTML=
+        '<td class="col-order"><span class="drag-handle" onpointerdown="startRowDrag(event,\''+ordKey+'\',\''+t.key+'\')" title="Перетащите мышкой, чтобы изменить порядок">⠿</span></td>'+
+        '<td class="col-key">'+keyHtml+sysLabel+
+          '<span class="link-btn'+linkActiveClass+'" data-linkkey="'+t.key+'" onclick="handleLinkClick(event,\''+t.key+'\')" title="Создать связь">🔗</span>'+
+          '<span class="del-btn" onclick="handleDelete(event,\''+t.key+'\',false)" title="Удалить задачу">🗑</span>'+
+        '</td>'+
+        '<td class="col-summary"><span class="summary-text" title="'+t.sum.replace(/"/g,'&quot;')+'">'+t.sum+'</span></td>'+
+        '<td class="col-assignee">'+renderAssigneeCell(t.key,t.assignee)+'</td>'+
+        '<td class="col-status">'+renderStatusCell(t.key,t.status,statusShort)+'</td>'+
+        '<td class="col-estimate"><span class="estimate-text">'+estDisplay+'</span></td>';
+      leftTable.appendChild(ltr);
+
+      const rtr=document.createElement('tr');
+      rtr.className='task-row';
+      rtr.dataset.key=t.key;
+      rtr.onclick=rowClickHandler;
+      rtr.innerHTML=
+        '<td class="col-chart">'+
+          '<div class="chart-cell">'+
+            '<div class="month-grid">'+gridColsHtml+'</div>'+
+            '<div class="bar '+(overdue?'overdue':'')+flagClass+'" data-key="'+t.key+'" style="left:'+leftPct+'%;width:'+widthPct+'%;background:'+bc+'" data-task=\''+ttData+'\' onmouseenter="showTT(event,this)" onmouseleave="hideTT()" onpointerdown="startMove(event,\''+t.key+'\')">'+
+              '<div class="handle left" onpointerdown="startResize(event,\''+t.key+'\',\'left\')"></div>'+
+              '<div class="handle right" onpointerdown="startResize(event,\''+t.key+'\',\'right\')"></div>'+
+            '</div>'+
+            '<div class="today-line" style="left:'+todayPct+'%"></div>'+
+          '</div>'+
+        '</td>';
+      rightTable.appendChild(rtr);
+    });
+
+    leftSection.appendChild(leftTable);
+    rightSection.appendChild(rightTable);
+    leftContainer.appendChild(leftSection);
+    rightContainer.appendChild(rightSection);
+  });
+
+  // Backlog
+  const bFiltered=backlog.filter(matchFilters);
+  bFiltered.sort((a,b)=>{
+    const sa=systemOf(a.key), sb=systemOf(b.key);
+    const ia=SYSTEM_ORDER.indexOf(sa), ib=SYSTEM_ORDER.indexOf(sb);
+    return (ia<0?99:ia)-(ib<0?99:ib)||a.rank-b.rank||a.key.localeCompare(b.key);
+  });
+  document.getElementById('backlogCnt').textContent=bFiltered.length;
+  const bb=document.getElementById('backlogBody');
+  bb.innerHTML='';
+  bFiltered.forEach(b=>{
+    const tr=document.createElement('tr');
+    tr.style.cursor='pointer';
+    tr.draggable=true;
+    tr.ondragstart=(ev)=>{handleBacklogDragStart(ev,b.key);};
+    tr.onclick=()=>{
+      if(window.__ganttSuppressClick){window.__ganttSuppressClick=false;return;}
+      window.open(BASE+b.key,'_blank');
+    };
+    tr.innerHTML=
+      '<td><span class="drag-handle" title="Перетащите в диаграмму, чтобы запланировать" style="cursor:grab">⠿</span><a class="key-link" href="'+BASE+b.key+'" target="_blank" onclick="event.stopPropagation()">'+b.key+'</a>'+
+        '<span class="del-btn" onclick="handleDelete(event,\''+b.key+'\',true)" title="Удалить задачу">🗑</span>'+
+      '</td>'+
+      '<td><span class="sys-badge '+sysCssClass(systemOf(b.key))+'">'+systemOf(b.key)+'</span></td>'+
+      '<td><span class="summary-text" style="max-width:380px" title="'+b.sum.replace(/"/g,'&quot;')+'">'+b.sum+'</span></td>'+
+      '<td><span class="priority-dot '+priorityDot(b.priority)+'"></span>'+b.priority+'</td>'+
+      '<td>'+renderStatusCell(b.key,b.status)+'</td>'+
+      '<td style="text-align:center;font-weight:600">'+fmtDshort(b.est)+'</td>'+
+      '<td>'+renderAssigneeCell(b.key,b.assignee)+'</td>';
+    bb.appendChild(tr);
+  });
+
+  updateLinkModeUI();
+  renderMilestoneChips();
+  drawLinks();
+  drawMilestones();
+  if(viewMode==='calendar')renderCalendar();
+}
+
+// --- Tooltip ---
+function showTT(ev,el){
+  if(dragState)return;
+  const d=JSON.parse(el.dataset.task);
+  const t=taskMap[d.k];
+  if(t){d.s=fmtDate(t.s);d.e=fmtDate(t.e);}
+  const tt=document.getElementById('tooltip');
+  tt.innerHTML='<span class="tt-key">'+d.k+'</span> <span class="sys-badge '+sysCssClass(d.sys)+'">'+d.sys+'</span> — '+d.sm+'<br>'+
+    '<span class="tt-label">Тип:</span> '+d.tp+' &nbsp;|&nbsp; <span class="tt-label">Приоритет:</span> '+d.p+'<br>'+
+    '<span class="tt-label">Статус:</span> '+d.st+'<br>'+
+    '<span class="tt-label">Период:</span> '+d.s+' → '+d.e+'<br>'+
+    '<span class="tt-label">Исполнитель:</span> '+d.a+'<br>'+
+    (d.labels?'<span class="tt-label">Метки:</span> '+d.labels+'<br>':'')+
+    '<span class="tt-label">Оценка:</span> '+d.est+' &nbsp;|&nbsp; <span class="tt-label">Затрачено:</span> '+d.spent+' &nbsp;|&nbsp; <span class="tt-label">Остаток:</span> '+d.rem+'<br>'+
+    '<span class="tt-label">Обновлено:</span> '+d.u;
+  tt.style.display='block';
+  positionTT(ev);
+}
+function positionTT(ev){
+  const tt=document.getElementById('tooltip');
+  let x=ev.clientX+12,y=ev.clientY+12;
+  if(x+390>window.innerWidth)x=ev.clientX-400;
+  if(y+200>window.innerHeight)y=ev.clientY-210;
+  tt.style.left=x+'px';tt.style.top=y+'px';
+}
+function hideTT(){document.getElementById('tooltip').style.display='none';}
+document.addEventListener('mousemove',e=>{if(document.getElementById('tooltip').style.display==='block')positionTT(e);});
+
+// --- Init & auth/filter flow ---
+(function setupPaneSync(){
+  const leftPane=document.getElementById('ganttLeftPane');
+  const rightPane=document.getElementById('ganttRightPane');
+  let syncing=false;
+  leftPane.addEventListener('scroll',()=>{
+    if(syncing)return;
+    syncing=true;
+    rightPane.scrollTop=leftPane.scrollTop;
+    syncing=false;
+  });
+  rightPane.addEventListener('scroll',()=>{
+    if(syncing)return;
+    syncing=true;
+    leftPane.scrollTop=rightPane.scrollTop;
+    syncing=false;
+  });
+})();
+
+let currentFilter=null; // {id, name}
+
+function showOverlay(id){
+  ['loginOverlay','filterOverlay','loadingOverlay'].forEach(o=>{
+    document.getElementById(o).style.display=(o===id)?'flex':'none';
+  });
+}
+function hideAllOverlays(){
+  ['loginOverlay','filterOverlay','loadingOverlay'].forEach(o=>{
+    document.getElementById(o).style.display='none';
+  });
+}
+
+async function submitLogin(){
+  const site=document.getElementById('lg-site').value.trim();
+  const email=document.getElementById('lg-email').value.trim();
+  const apiToken=document.getElementById('lg-token').value.trim();
+  const errEl=document.getElementById('loginError');
+  errEl.style.display='none';
+  document.getElementById('loginBtn').textContent='Проверка…';
+  try{
+    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({site,email,apiToken})});
+    const data=await r.json();
+    if(!r.ok){
+      errEl.textContent=data.error||'Не удалось войти';
+      errEl.style.display='block';
+      document.getElementById('loginBtn').textContent='Войти';
+      return;
+    }
+    onLoggedIn(data.user,data.site);
+  }catch(e){
+    errEl.textContent='Сервер недоступен. Убедитесь, что приложение запущено (npm start).';
+    errEl.style.display='block';
+    document.getElementById('loginBtn').textContent='Войти';
+  }
+}
+function onLoggedIn(user,site){
+  if(site)BASE=site+'/browse/';
+  document.getElementById('userBadge').style.display='flex';
+  document.getElementById('userName').textContent='👤 '+user.displayName;
+  showOverlay('filterOverlay');
+  loadFilters('');
+}
+async function doLogout(){
+  await fetch('/api/logout',{method:'POST'});
+  location.reload();
+}
+function switchFilter(){
+  showOverlay('filterOverlay');
+  loadFilters('');
+}
+
+let filterSearchTimer=null;
+function onFilterSearch(q){
+  if(filterSearchTimer)clearTimeout(filterSearchTimer);
+  filterSearchTimer=setTimeout(()=>loadFilters(q),300);
+}
+async function loadFilters(q){
+  const listEl=document.getElementById('filterList');
+  const errEl=document.getElementById('filterError');
+  errEl.style.display='none';
+  listEl.innerHTML='<div style="padding:14px;color:#94a3b8;font-size:13px">Загрузка списка фильтров…</div>';
+  try{
+    const r=await fetch('/api/filters?q='+encodeURIComponent(q||''));
+    const data=await r.json();
+    if(!r.ok){
+      listEl.innerHTML='';
+      errEl.textContent=data.error||'Не удалось получить фильтры';
+      errEl.style.display='block';
+      return;
+    }
+    if(!data.filters||data.filters.length===0){
+      listEl.innerHTML='<div style="padding:14px;color:#94a3b8;font-size:13px">Ничего не найдено. Попробуйте другое название.</div>';
+      return;
+    }
+    listEl.innerHTML='';
+    data.filters.forEach(f=>{
+      const div=document.createElement('div');
+      div.className='filter-item';
+      div.innerHTML='<span>'+f.name+'</span>'+(f.favourite?'<span class="fav">★ избранный</span>':'');
+      div.onclick=()=>selectFilter(f.id,f.name);
+      listEl.appendChild(div);
+    });
+  }catch(e){
+    listEl.innerHTML='';
+    errEl.textContent='Сервер недоступен.';
+    errEl.style.display='block';
+  }
+}
+
+function computeTimelineRange(){
+  let minD=null,maxD=null;
+  tasks.forEach(t=>{
+    const s=new Date(t.s+'T00:00:00'), e=new Date(t.e+'T00:00:00');
+    if(!minD||s<minD)minD=s;
+    if(!maxD||e>maxD)maxD=e;
+  });
+  if(!minD)minD=new Date(TODAY);
+  if(!maxD)maxD=new Date(TODAY);
+  if(TODAY<minD)minD=TODAY;
+  if(TODAY>maxD)maxD=TODAY;
+  TL_START=new Date(minD.getFullYear(),minD.getMonth()-1,1);
+  TL_END=new Date(maxD.getFullYear(),maxD.getMonth()+2,0);
+}
+
+async function selectFilter(id,name){
+  currentFilter={id,name};
+  showOverlay('loadingOverlay');
+  document.getElementById('loadingText').textContent='⏳ Загружаем «'+name+'» из Jira…';
+  try{
+    const r=await fetch('/api/issues?filterId='+encodeURIComponent(id));
+    const data=await r.json();
+    if(!r.ok){
+      hideAllOverlays();
+      alert('Ошибка загрузки: '+(data.error||'неизвестная ошибка'));
+      showOverlay('filterOverlay');
+      return;
+    }
+    tasks=data.tasks;
+    backlog=data.backlog;
+    STORAGE_KEY='gantt_local_overlay_filter_'+id;
+    loadState(); // подмешиваем локальные правки (даты, связи, вехи), сохранённые ранее для этого фильтра
+    computeTimelineRange();
+    initFilters();
+    buildGantt();
+    document.getElementById('headerTitle').textContent='📊 '+name;
+    document.getElementById('headerSubtitle').textContent=
+      'Обновлено: '+TODAY.toLocaleString('ru-RU')+' • '+data.total+' задач • Источник: Jira-фильтр «'+name+'»';
+    document.getElementById('footerText').textContent=
+      'Фильтр: '+name+' (Jira, id '+id+') • Изменения дат/связей/вех сохраняются локально в этом браузере • Изменения статуса/исполнителя синхронизируются с Jira • Оценки в человеко-днях (1 чд = 8 часов)';
+    hideAllOverlays();
+  }catch(e){
+    hideAllOverlays();
+    alert('Не удалось загрузить данные: '+e.message);
+    showOverlay('filterOverlay');
+  }
+}
+
+function refreshFromJira(){
+  if(!currentFilter)return;
+  if(!confirm('Перезагрузить свежие данные из Jira? Локальные правки (даты, связи, вехи, вручную добавленные задачи) для этого фильтра будут потеряны.'))return;
+  try{localStorage.removeItem(STORAGE_KEY);}catch(e){}
+  selectFilter(currentFilter.id,currentFilter.name);
+}
+async function checkSession(){
+  try{
+    const r=await fetch('/api/session');
+    const data=await r.json();
+    if(data.loggedIn){
+      onLoggedIn(data.user,data.site);
+    } else {
+      showOverlay('loginOverlay');
+    }
+  }catch(e){
+    showOverlay('loginOverlay');
+    document.getElementById('loginError').textContent='Сервер недоступен. Запустите приложение командой npm start.';
+    document.getElementById('loginError').style.display='block';
+  }
+}
+checkSession();
+</script>
+</body>
+</html>

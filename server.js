@@ -1,0 +1,267 @@
+// Локальный сервер: раздаёт фронтенд диаграммы Ганта и проксирует запросы к Jira Cloud.
+// Запуск: npm install && npm start, затем открыть http://localhost:3210
+
+const express = require('express');
+const session = require('express-session');
+const crypto = require('crypto');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3210;
+
+// ---- Настройки полей Jira (специфичны для конкретного проекта/инстанса) ----
+// Если диаграмма строится для другого проекта Jira, замените ID полей ниже
+// (их можно найти через Jira -> Настройки -> Поля, либо через /rest/api/3/field).
+const FIELD_START = 'customfield_10248';       // Дата начала
+const FIELD_PLAN_END = 'customfield_10311';    // Плановая дата завершения
+const FIELD_RESCHEDULE = 'customfield_10537';  // Количество переносов плановой даты
+
+const SYSTEM_MAP = { EWM: 'EWM', OPER: 'ERP', TEST: 'TEST', ABAP: 'ABAP', BASIS: 'BASIS' };
+function systemOf(key) {
+  const prefix = key.split('-')[0];
+  return SYSTEM_MAP[prefix] || prefix;
+}
+const RANK_ORDER = { 'Блокирует Бизнес': 0, 'Критический': 1, 'Важная': 2, 'Normal': 3, 'Незначительный': 4 };
+
+app.use(express.json());
+app.use(session({
+  secret: crypto.randomBytes(32).toString('hex'), // новый секрет при каждом запуске сервера
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, sameSite: 'lax', maxAge: 8 * 60 * 60 * 1000 } // 8 часов
+}));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ---- Вспомогательная функция обращения к Jira REST API ----
+function normalizeSite(site) {
+  site = site.trim().replace(/\/$/, '');
+  if (!site.startsWith('http')) site = 'https://' + site;
+  return site;
+}
+
+async function jiraFetch(req, apiPath, options = {}) {
+  const cred = req.session.jira;
+  if (!cred) {
+    const err = new Error('Не авторизовано');
+    err.status = 401;
+    throw err;
+  }
+  const url = cred.site + apiPath;
+  const auth = Buffer.from(cred.email + ':' + cred.apiToken).toString('base64');
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': 'Basic ' + auth,
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+  return res;
+}
+
+// ---- Авторизация ----
+app.post('/api/login', async (req, res) => {
+  try {
+    const { site, email, apiToken } = req.body;
+    if (!site || !email || !apiToken) {
+      return res.status(400).json({ error: 'Укажите адрес Jira, email и API-токен.' });
+    }
+    const normalizedSite = normalizeSite(site);
+    const auth = Buffer.from(email + ':' + apiToken).toString('base64');
+    const meRes = await fetch(normalizedSite + '/rest/api/3/myself', {
+      headers: { 'Authorization': 'Basic ' + auth, 'Accept': 'application/json' }
+    });
+    if (meRes.status === 401 || meRes.status === 403) {
+      return res.status(401).json({ error: 'Jira отклонила email/токен. Проверьте данные и права доступа.' });
+    }
+    if (!meRes.ok) {
+      return res.status(502).json({ error: 'Не удалось связаться с Jira (' + meRes.status + '). Проверьте адрес сайта.' });
+    }
+    const me = await meRes.json();
+    req.session.jira = { site: normalizedSite, email, apiToken };
+    req.session.user = { displayName: me.displayName, avatarUrl: me.avatarUrls && me.avatarUrls['32x32'] };
+    res.json({ ok: true, user: req.session.user, site: normalizedSite });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Внутренняя ошибка: ' + e.message });
+  }
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy(() => res.json({ ok: true }));
+});
+
+app.get('/api/session', (req, res) => {
+  if (req.session.jira && req.session.user) {
+    res.json({ loggedIn: true, user: req.session.user, site: req.session.jira.site });
+  } else {
+    res.json({ loggedIn: false });
+  }
+});
+
+// ---- Список фильтров пользователя (избранные + поиск по имени) ----
+app.get('/api/filters', async (req, res) => {
+  try {
+    const q = req.query.q || '';
+    let results = [];
+    const favRes = await jiraFetch(req, '/rest/api/3/filter/favourite');
+    if (favRes.ok) {
+      const favs = await favRes.json();
+      results = favs.map(f => ({ id: f.id, name: f.name, favourite: true }));
+    }
+    if (q) {
+      const searchRes = await jiraFetch(req, '/rest/api/3/filter/search?filterName=' + encodeURIComponent(q) + '&maxResults=20');
+      if (searchRes.ok) {
+        const data = await searchRes.json();
+        const extra = (data.values || []).map(f => ({ id: f.id, name: f.name, favourite: false }));
+        const knownIds = new Set(results.map(r => r.id));
+        extra.forEach(f => { if (!knownIds.has(f.id)) results.push(f); });
+      }
+    }
+    res.json({ filters: results });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// ---- Загрузка задач по фильтру (id фильтра или произвольный JQL) ----
+app.get('/api/issues', async (req, res) => {
+  try {
+    const { filterId, jql: rawJql } = req.query;
+    let jql;
+    if (rawJql) jql = rawJql;
+    else if (filterId) jql = 'filter = ' + filterId;
+    else return res.status(400).json({ error: 'Укажите filterId или jql' });
+
+    const fields = [
+      'summary', 'status', 'assignee', 'priority', 'issuetype', 'labels',
+      'created', 'updated', 'timeoriginalestimate', 'timespent', 'timeestimate',
+      FIELD_START, FIELD_PLAN_END, FIELD_RESCHEDULE, 'duedate'
+    ];
+
+    let allIssues = [];
+    let nextPageToken = null;
+    let guard = 0;
+    do {
+      guard++;
+      const body = {
+        jql,
+        fields,
+        maxResults: 100,
+        ...(nextPageToken ? { nextPageToken } : {})
+      };
+      const searchRes = await jiraFetch(req, '/rest/api/3/search/jql', {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+      if (!searchRes.ok) {
+        const errText = await searchRes.text();
+        return res.status(searchRes.status).json({ error: 'Jira вернула ошибку: ' + errText.slice(0, 300) });
+      }
+      const data = await searchRes.json();
+      allIssues = allIssues.concat(data.issues || []);
+      nextPageToken = data.isLast ? null : data.nextPageToken;
+    } while (nextPageToken && guard < 30);
+
+    const tasks = [];
+    const backlog = [];
+    allIssues.forEach(issue => {
+      const f = issue.fields;
+      const priority = (f.priority && f.priority.name) || 'Normal';
+      const item = {
+        key: issue.key,
+        sum: f.summary || '',
+        status: (f.status && f.status.name) || 'Новый',
+        assignee: (f.assignee && f.assignee.displayName) || '—',
+        rank: RANK_ORDER[priority] !== undefined ? RANK_ORDER[priority] : 3,
+        priority,
+        type: (f.issuetype && f.issuetype.name) || 'Задача',
+        labels: (f.labels || []).join(','),
+        est: f.timeoriginalestimate || 0,
+        spent: f.timespent || 0,
+        rem: f.timeestimate || 0,
+        updated: f.updated ? f.updated.slice(0, 16).replace('T', ' ') : '',
+        flagged: !!(f[FIELD_RESCHEDULE] && f[FIELD_RESCHEDULE] >= 3),
+        custom: false
+      };
+      const start = f[FIELD_START];
+      const planEnd = f[FIELD_PLAN_END];
+      if (start && planEnd) {
+        tasks.push({ ...item, s: start, e: planEnd });
+      } else {
+        backlog.push(item);
+      }
+    });
+
+    res.json({ tasks, backlog, total: allIssues.length });
+  } catch (e) {
+    console.error(e);
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// ---- Поиск пользователей (для назначения исполнителя) ----
+app.get('/api/users', async (req, res) => {
+  try {
+    const q = req.query.q || '';
+    if (!q) return res.json({ users: [] });
+    const r = await jiraFetch(req, '/rest/api/3/user/search?query=' + encodeURIComponent(q) + '&maxResults=10');
+    if (!r.ok) return res.status(r.status).json({ error: 'Ошибка поиска пользователей' });
+    const list = await r.json();
+    res.json({ users: list.map(u => ({ accountId: u.accountId, displayName: u.displayName })) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// ---- Обновление исполнителя в Jira ----
+app.patch('/api/issues/:key/assignee', async (req, res) => {
+  try {
+    const { accountId } = req.body;
+    const r = await jiraFetch(req, '/rest/api/3/issue/' + req.params.key + '/assignee', {
+      method: 'PUT',
+      body: JSON.stringify({ accountId: accountId || null })
+    });
+    if (r.status !== 204) {
+      const t = await r.text();
+      return res.status(r.status).json({ error: 'Jira отклонила изменение: ' + t.slice(0, 300) });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// ---- Обновление статуса в Jira (через доступные переходы) ----
+app.patch('/api/issues/:key/status', async (req, res) => {
+  try {
+    const { statusName } = req.body;
+    const trRes = await jiraFetch(req, '/rest/api/3/issue/' + req.params.key + '/transitions');
+    if (!trRes.ok) return res.status(trRes.status).json({ error: 'Не удалось получить переходы статуса' });
+    const trData = await trRes.json();
+    const match = (trData.transitions || []).find(t => t.to && t.to.name === statusName);
+    if (!match) {
+      const available = (trData.transitions || []).map(t => t.to.name).join(', ');
+      return res.status(409).json({ error: 'Из текущего статуса нельзя перейти в «' + statusName + '» напрямую. Доступные переходы: ' + (available || 'нет') });
+    }
+    const doRes = await jiraFetch(req, '/rest/api/3/issue/' + req.params.key + '/transitions', {
+      method: 'POST',
+      body: JSON.stringify({ transition: { id: match.id } })
+    });
+    if (doRes.status !== 204) {
+      const t = await doRes.text();
+      return res.status(doRes.status).json({ error: 'Jira отклонила переход: ' + t.slice(0, 300) });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log('');
+  console.log('  Гант + Jira запущен: http://localhost:' + PORT);
+  console.log('  Остановить сервер: Ctrl+C');
+  console.log('');
+});
