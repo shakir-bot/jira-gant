@@ -492,7 +492,7 @@ let editingCell=null; // {key, field:'assignee'|'status'}
 const STATUS_OPTIONS=['Новый','В работе','В тестировании','В отделе тестирования','В отделе разработки','В отделе архитектуры','В Очереди','Готов к переносу'];
 let viewMode='gantt'; // 'gantt' | 'calendar'
 let calPeriodType='month'; // 'week' | 'month' | 'quarter'
-let calRefDate=new Date(2026,6,6);
+let calRefDate=new Date();
 window.__renderedOrder={};
 
 // --- Persistence (localStorage, works fully offline in any browser) ---
@@ -1165,6 +1165,27 @@ function updateLinkModeUI(){
     bar.style.color='#94a3b8';
   }
 }
+function cascadeFromTask(key,visited){
+  visited=visited||new Set();
+  if(visited.has(key))return;
+  visited.add(key);
+  const t=taskMap[key];
+  if(!t)return;
+  links.filter(l=>l.from===key).forEach(l=>{
+    const succ=taskMap[l.to];
+    if(!succ)return;
+    const oldStart=new Date(succ.s+'T00:00:00');
+    const oldEnd=new Date(succ.e+'T00:00:00');
+    const durationMs=Math.max(oldEnd-oldStart,86400000);
+    const newStart=new Date(t.e+'T00:00:00');
+    if(newStart.getTime()===oldStart.getTime())return;
+    let newEnd=new Date(newStart.getTime()+durationMs);
+    if(newEnd>TL_END){const shift=newEnd-TL_END;newEnd=new Date(newEnd.getTime()-shift);}
+    succ.s=toISO(newStart);
+    succ.e=toISO(newEnd);
+    cascadeFromTask(l.to,visited);
+  });
+}
 function handleLinkClick(e,key){
   e.stopPropagation();
   if(linkSource===null){
@@ -1176,6 +1197,7 @@ function handleLinkClick(e,key){
   } else {
     if(!links.some(l=>l.from===linkSource&&l.to===key)){
       links.push({from:linkSource,to:key});
+      cascadeFromTask(linkSource);
     }
     linkSource=null;
     buildGantt();
@@ -1286,6 +1308,7 @@ function onDragEnd(e){
   if(dragState.moved){
     window.__ganttSuppressClick=true;
     setTimeout(()=>{window.__ganttSuppressClick=false;},0);
+    cascadeFromTask(dragState.key);
     buildGantt();
     saveState();
   }
@@ -1771,8 +1794,16 @@ function computeTimelineRange(){
   if(!maxD)maxD=new Date(TODAY);
   if(TODAY<minD)minD=TODAY;
   if(TODAY>maxD)maxD=TODAY;
-  TL_START=new Date(minD.getFullYear(),minD.getMonth()-1,1);
-  TL_END=new Date(maxD.getFullYear(),maxD.getMonth()+2,0);
+  // Всегда показываем как минимум полный календарный год текущей даты,
+  // расширяя диапазон дальше, если задачи выходят за его пределы.
+  const yearStart=new Date(TODAY.getFullYear(),0,1);
+  const yearEnd=new Date(TODAY.getFullYear(),11,31);
+  let start=new Date(minD.getFullYear(),minD.getMonth()-1,1);
+  let end=new Date(maxD.getFullYear(),maxD.getMonth()+2,0);
+  if(start>yearStart)start=yearStart;
+  if(end<yearEnd)end=yearEnd;
+  TL_START=start;
+  TL_END=end;
 }
 
 async function selectFilter(id,name){
