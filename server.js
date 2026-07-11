@@ -23,6 +23,17 @@ function systemOf(key) {
 }
 const RANK_ORDER = { 'Блокирует Бизнес': 0, 'Критический': 1, 'Важная': 2, 'Normal': 3, 'Незначительный': 4 };
 
+// Ищет среди issuelinks задачи ключ первой связанной задачи проекта ABAP (любой тип связи, любое направление)
+// (логика перенесена из jira-roadmap-app)
+function findLinkedAbapKey(issue) {
+  const links = (issue.fields && issue.fields.issuelinks) || [];
+  for (const link of links) {
+    const other = link.outwardIssue || link.inwardIssue;
+    if (other && /^ABAP-/.test(other.key)) return other.key;
+  }
+  return null;
+}
+
 app.use(express.json());
 app.use(session({
   secret: crypto.randomBytes(32).toString('hex'), // новый секрет при каждом запуске сервера
@@ -137,7 +148,7 @@ app.get('/api/issues', async (req, res) => {
     const fields = [
       'summary', 'status', 'assignee', 'priority', 'issuetype', 'labels',
       'created', 'updated', 'timeoriginalestimate', 'timespent', 'timeestimate',
-      FIELD_START, FIELD_PLAN_END, FIELD_RESCHEDULE, 'duedate'
+      FIELD_START, FIELD_PLAN_END, FIELD_RESCHEDULE, 'duedate', 'issuelinks'
     ];
 
     let allIssues = [];
@@ -164,6 +175,23 @@ app.get('/api/issues', async (req, res) => {
       nextPageToken = data.isLast ? null : data.nextPageToken;
     } while (nextPageToken && guard < 30);
 
+    // Для задач со связанной ABAP-задачей подтягиваем её реальные данные (оценка/статус/исполнитель)
+    // одним пакетным запросом (логика перенесена из jira-roadmap-app)
+    const abapKeys = [...new Set(allIssues.map(findLinkedAbapKey).filter(Boolean))];
+    const abapByKey = {};
+    for (let i = 0; i < abapKeys.length; i += 50) {
+      const chunk = abapKeys.slice(i, i + 50);
+      const abapJql = 'key in (' + chunk.join(',') + ')';
+      const abapRes = await jiraFetch(req, '/rest/api/3/search/jql', {
+        method: 'POST',
+        body: JSON.stringify({ jql: abapJql, maxResults: 100, fields: ['summary', 'assignee', 'status', 'timeoriginalestimate', 'timespent', 'timeestimate'] })
+      });
+      if (abapRes.ok) {
+        const abapData = await abapRes.json();
+        (abapData.issues || []).forEach(ai => { abapByKey[ai.key] = ai; });
+      }
+    }
+
     const tasks = [];
     const backlog = [];
     allIssues.forEach(issue => {
@@ -185,6 +213,19 @@ app.get('/api/issues', async (req, res) => {
         flagged: !!(f[FIELD_RESCHEDULE] && f[FIELD_RESCHEDULE] >= 3),
         custom: false
       };
+      const linkedAbapKey = findLinkedAbapKey(issue);
+      if (linkedAbapKey && abapByKey[linkedAbapKey]) {
+        const af = abapByKey[linkedAbapKey].fields || {};
+        item.abapChild = {
+          key: linkedAbapKey,
+          sum: af.summary || linkedAbapKey,
+          assignee: (af.assignee && af.assignee.displayName) || '—',
+          status: (af.status && af.status.name) || 'Новый',
+          est: af.timeoriginalestimate || 0,
+          spent: af.timespent || 0,
+          rem: af.timeestimate || 0
+        };
+      }
       const start = f[FIELD_START];
       const planEnd = f[FIELD_PLAN_END];
       if (start && planEnd) {

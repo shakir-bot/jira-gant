@@ -169,6 +169,30 @@
 
   /* Calendar view */
   .calendar-section{padding:4px 28px 24px}
+  .team-section{padding:4px 28px 24px}
+  .team-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+  .plan-settings{display:flex;gap:16px;flex-wrap:wrap}
+  .plan-settings label{font-size:12px;color:#475569;display:flex;align-items:center;gap:6px}
+  .plan-settings input{width:56px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px}
+  .team-hint{font-size:12px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:14px}
+  .team-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
+  .team-table th{font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:8px 12px;text-align:left;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+  .team-table td{padding:8px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+  .team-table input[type="text"],.team-table select,.team-table input[type="number"]{width:100%;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px}
+  .vac-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+  .vac-row input[type="date"]{padding:3px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px}
+  .vac-row .vac-del{cursor:pointer;color:#cbd5e1;font-size:12px}
+  .vac-row .vac-del:hover{color:#dc2626}
+  .vac-add{font-size:11px;color:#3b82f6;cursor:pointer;font-weight:600;margin-top:2px}
+  .vac-add:hover{text-decoration:underline}
+  .forecast-badge{display:inline-block;background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:5px;vertical-align:middle}
+  .abap-link-badge{display:inline-block;background:#ede9fe;color:#6d28d9;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:5px;vertical-align:middle;cursor:pointer}
+  .row.abap-child .summary-text,.row.abap-child .assignee-text{font-style:italic;color:#94a3b8}
+  tr.abap-child-row{background:#fafbfc}
+  tr.abap-child-row .col-key{padding-left:20px}
+  tr.abap-child-row .col-key::before{content:'↳';color:#94a3b8;margin-right:4px}
+  .collapse-toggle{cursor:pointer;color:#94a3b8;font-size:11px;margin-right:4px;user-select:none}
+  .collapse-toggle:hover{color:#3b82f6}
   .cal-controls{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
   .cal-period-btn{padding:5px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;font-size:12px;cursor:pointer;color:#334155;font-weight:600}
   .cal-period-btn.active{background:#eff6ff;border-color:#3b82f6;color:#2563eb}
@@ -228,6 +252,7 @@
 <div class="view-toggle">
   <button id="ganttViewBtn" class="active" onclick="setViewMode('gantt')">📊 Гант</button>
   <button id="calViewBtn" onclick="setViewMode('calendar')">📅 Календарь</button>
+  <button id="teamViewBtn" onclick="setViewMode('team')">👥 Команда</button>
 </div>
 
 <div id="ganttViewSection">
@@ -342,6 +367,22 @@
     <button class="cal-period-btn" data-period="quarter" onclick="setCalPeriod('quarter')">Квартал</button>
   </div>
   <div id="calendarGrid"></div>
+</div>
+
+<div id="teamViewSection" class="team-section" style="display:none">
+  <div class="team-toolbar">
+    <button class="milestone-btn" onclick="addTeamMember()">➕ Добавить сотрудника</button>
+    <div class="plan-settings">
+      <label title="Ожидание задачи в очереди на распределение ABAP-разработчику">Очередь ABAP, дн. <input type="number" id="setQueueDays" min="0" step="0.5"></label>
+      <label title="Время на тестирование">Тестирование, дн. <input type="number" id="setTestDays" min="0" step="0.5"></label>
+      <label title="Время на опытно-промышленную эксплуатацию">ОПЭ, дн. <input type="number" id="setOpeDays" min="0" step="0.5"></label>
+    </div>
+  </div>
+  <p class="team-hint">Эти данные используются только для задач <b>без оценки в Jira</b> — для них диаграмма сама прогнозирует плановую дату завершения с учётом загрузки и отпусков исполнителя (кнопка «прогноз» на баре). Задачи, у которых оценка в Jira уже есть, но нет плановых дат, остаются в бэклоге как раньше.</p>
+  <table class="team-table">
+    <thead><tr><th style="width:220px">Имя</th><th style="width:200px">Роль</th><th style="width:110px">Загрузка, %</th><th>Отпуска</th><th style="width:40px"></th></tr></thead>
+    <tbody id="teamTableBody"></tbody>
+  </table>
 </div>
 
 <div class="legend">
@@ -489,6 +530,11 @@ let groupBy='system'; // 'system' | 'rank'
 let zoomLevel='month'; // 'week' | 'month' | 'quarter'
 let storageAvailable=true;
 let editingCell=null; // {key, field:'assignee'|'status'}
+const ROLES=['Консультант','ABAP-разработчик','Тестировщик','Руководитель проекта','Бизнес-аналитик','Архитектор'];
+let team=[]; // {id,name,role,utilization,vacations:[{start,end}]}
+let nextTeamId=1;
+let planSettings={queueDays:5,testDays:1,opeDays:0.5,defaultEstimateDays:2};
+const DEFAULT_ESTIMATE_DAYS=2; // консультанто-дней, если у задачи нет оценки в Jira вообще
 const STATUS_OPTIONS=['Новый','В работе','В тестировании','В отделе тестирования','В отделе разработки','В отделе архитектуры','В Очереди','Готов к переносу'];
 let viewMode='gantt'; // 'gantt' | 'calendar'
 let calPeriodType='month'; // 'week' | 'month' | 'quarter'
@@ -538,14 +584,84 @@ function flashSaved(){
   },1000);
 }
 
+// --- Команда и настройки планирования: глобальные, не привязаны к конкретному фильтру ---
+function loadTeamAndSettings(){
+  try{
+    const raw=localStorage.getItem('gantt_team_v1');
+    if(raw){
+      const d=JSON.parse(raw);
+      if(Array.isArray(d.team))team=d.team;
+      if(typeof d.nextTeamId==='number')nextTeamId=d.nextTeamId;
+      if(d.planSettings)planSettings={...planSettings,...d.planSettings};
+    }
+  }catch(e){/* нет сохранённых данных */}
+}
+function saveTeamAndSettings(){
+  try{
+    localStorage.setItem('gantt_team_v1',JSON.stringify({team,nextTeamId,planSettings}));
+  }catch(e){/* тихо игнорируем */}
+}
+function ensureTeamMember(name){
+  if(!name||name==='—')return;
+  if(!team.some(m=>m.name===name)){
+    team.push({id:nextTeamId++,name,role:'Консультант',utilization:100,vacations:[]});
+  }
+}
+function getMember(name){return team.find(m=>m.name===name);}
+function isNonWorkingForMember(date,member){
+  if(!member)return false;
+  return member.vacations.some(v=>v.start&&v.end&&date>=new Date(v.start+'T00:00:00')&&date<=new Date(v.end+'T00:00:00'));
+}
+function addBusinessDays(date,n,member){
+  let d=new Date(date),count=0;
+  while(count<n){
+    d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);
+    const dow=d.getDay();
+    if(dow===0||dow===6)continue;
+    if(isNonWorkingForMember(d,member))continue;
+    count++;
+  }
+  return d;
+}
+/* оценка консультанта (чел-дн) -> дни ABAP-разработчика, по статистике из jira-roadmap-app */
+function lookupAbapDays(consultantDays){
+  if(consultantDays<3)return 1;
+  if(consultantDays<=7)return 3;
+  if(consultantDays<=14)return 5;
+  if(consultantDays<=21)return 8;
+  return 11;
+}
+/* Авто-планирование для задач без оценки в Jira: учитывает загрузку и отпуска
+   исполнителя, очередь/реализацию ABAP (по связанной задаче или по прогнозной
+   таблице) и время на тестирование/ОПЭ. Логика перенесена из jira-roadmap-app. */
+function computeAutoSchedule(item,startDate){
+  const member=getMember(item.assignee);
+  const utilization=member?Math.max(member.utilization||100,1):100;
+  const rawConsultantDays=(item.est&&item.est>0)?(item.est/28800):DEFAULT_ESTIMATE_DAYS;
+  const stretchedConsultantDays=rawConsultantDays/(utilization/100);
+  const abapChild=item.abapChild;
+  const abapDays=(abapChild&&abapChild.est>0)?(abapChild.est/28800):lookupAbapDays(rawConsultantDays);
+  const total=stretchedConsultantDays+planSettings.queueDays+abapDays+planSettings.testDays+planSettings.opeDays;
+  const wholeDays=Math.ceil(total);
+  const end=addBusinessDays(startDate,wholeDays,member);
+  const abapStartDays=Math.ceil(stretchedConsultantDays+planSettings.queueDays);
+  const abapEndDays=Math.ceil(stretchedConsultantDays+planSettings.queueDays+abapDays);
+  const abapStart=addBusinessDays(startDate,abapStartDays,member);
+  const abapEnd=addBusinessDays(startDate,abapEndDays,member);
+  return {end,abapStart,abapEnd};
+}
+
 // --- View mode ---
 function setViewMode(mode){
   viewMode=mode;
   document.getElementById('ganttViewBtn').classList.toggle('active',mode==='gantt');
   document.getElementById('calViewBtn').classList.toggle('active',mode==='calendar');
+  document.getElementById('teamViewBtn').classList.toggle('active',mode==='team');
   document.getElementById('ganttViewSection').style.display=(mode==='gantt')?'':'none';
   document.getElementById('calendarViewSection').style.display=(mode==='calendar')?'':'none';
+  document.getElementById('teamViewSection').style.display=(mode==='team')?'':'none';
   if(mode==='calendar')renderCalendar();
+  if(mode==='team')renderTeam();
 }
 function setCalPeriod(type){
   calPeriodType=type;
@@ -1559,6 +1675,11 @@ function buildGantt(){
       const linkActiveClass=(linkSource===t.key)?' active':'';
       const sysLabel=(groupBy!=='system')?('<span class="sys-badge '+sysCssClass(systemOf(t.key))+'">'+systemOf(t.key)+'</span>'):'';
       const keyHtml=t.custom?('<span class="key-link" style="cursor:default;color:#0f172a" title="Задача создана вручную, не в Jira">'+t.key+' ✎</span>'):('<a class="key-link" href="'+BASE+t.key+'" target="_blank" onclick="event.stopPropagation()">'+t.key+'</a>');
+      const forecastBadge=t.forecast?'<span class="forecast-badge" title="Даты рассчитаны автоматически — в Jira для этой задачи нет оценки">прогноз</span>':'';
+      const hasAbapSub=!!(t.abapChild&&t.abapChild.s&&t.abapChild.e);
+      const collapseToggle=hasAbapSub?('<span class="collapse-toggle" onclick="event.stopPropagation();toggleAbapCollapse(\''+t.key+'\')" title="'+(t.collapsed?'Показать':'Скрыть')+' связанную ABAP-задачу">'+(t.collapsed?'▸':'▾')+'</span>'):'';
+      const abapBadge=(t.abapChild&&!hasAbapSub)?('<span class="abap-link-badge" title="Связанная ABAP-задача: '+t.abapChild.key+' — '+t.abapChild.sum.replace(/"/g,'&quot;')+' ('+t.abapChild.status+')">🔗 '+t.abapChild.key+'</span>'):'';
+      const collapsedAbapBadge=(hasAbapSub&&t.collapsed)?('<span class="abap-link-badge" title="'+t.abapChild.sum.replace(/"/g,'&quot;')+'">'+t.abapChild.key+' скрыт</span>'):'';
       const ttData=JSON.stringify({k:t.key,s:fmtDate(t.s),e:fmtDate(t.e),st:t.status,a:t.assignee,p:t.priority,sm:t.sum,r:rankLabel(t.rank),tp:t.type,u:t.updated||'',labels:t.labels||'',est:fmtD(t.est),spent:fmtD(t.spent),rem:fmtD(t.rem),sys:systemOf(t.key)});
 
       const rowClickHandler=()=>{
@@ -1573,7 +1694,7 @@ function buildGantt(){
       ltr.onclick=rowClickHandler;
       ltr.innerHTML=
         '<td class="col-order"><span class="drag-handle" onpointerdown="startRowDrag(event,\''+ordKey+'\',\''+t.key+'\')" title="Перетащите мышкой, чтобы изменить порядок">⠿</span></td>'+
-        '<td class="col-key">'+keyHtml+sysLabel+
+        '<td class="col-key">'+collapseToggle+keyHtml+sysLabel+forecastBadge+abapBadge+collapsedAbapBadge+
           '<span class="link-btn'+linkActiveClass+'" data-linkkey="'+t.key+'" onclick="handleLinkClick(event,\''+t.key+'\')" title="Создать связь">🔗</span>'+
           '<span class="del-btn" onclick="handleDelete(event,\''+t.key+'\',false)" title="Удалить задачу">🗑</span>'+
         '</td>'+
@@ -1599,6 +1720,40 @@ function buildGantt(){
           '</div>'+
         '</td>';
       rightTable.appendChild(rtr);
+
+      if(hasAbapSub&&!t.collapsed){
+        const ac=t.abapChild;
+        const acLeftPct=dayPos(ac.s+'T00:00:00');
+        const acRightPct=dayPos(ac.e+'T00:00:00');
+        const acWidthPct=Math.max(acRightPct-acLeftPct,0.8);
+        const acStatusShort=ac.status.length>22?ac.status.substring(0,20)+'…':ac.status;
+        const acTtData=JSON.stringify({k:ac.key,s:fmtDate(ac.s),e:fmtDate(ac.e),st:ac.status,a:ac.assignee,p:'',sm:ac.sum,r:'',tp:'ABAP (связанная)',u:'',labels:'',est:fmtD(ac.est),spent:fmtD(ac.spent),rem:fmtD(ac.rem),sys:'ABAP'});
+        const lac=document.createElement('tr');
+        lac.className='task-row abap-child-row';
+        lac.dataset.key=ac.key;
+        lac.onclick=()=>{if(!window.__ganttSuppressClick)window.open(BASE+ac.key,'_blank');window.__ganttSuppressClick=false;};
+        lac.innerHTML=
+          '<td class="col-order"></td>'+
+          '<td class="col-key"><a class="key-link" href="'+BASE+ac.key+'" target="_blank" onclick="event.stopPropagation()">'+ac.key+'</a></td>'+
+          '<td class="col-summary"><span class="summary-text" title="'+ac.sum.replace(/"/g,'&quot;')+'">'+ac.sum+'</span></td>'+
+          '<td class="col-assignee"><span class="assignee-text">'+ac.assignee+'</span></td>'+
+          '<td class="col-status"><span class="status-badge '+statusClass(ac.status)+'">'+acStatusShort+'</span></td>'+
+          '<td class="col-estimate"><span class="estimate-text">'+fmtDshort(ac.est)+'</span></td>';
+        leftTable.appendChild(lac);
+
+        const rac=document.createElement('tr');
+        rac.className='task-row abap-child-row';
+        rac.dataset.key=ac.key;
+        rac.innerHTML=
+          '<td class="col-chart">'+
+            '<div class="chart-cell">'+
+              '<div class="month-grid">'+gridColsHtml+'</div>'+
+              '<div class="bar" data-key="'+ac.key+'" style="left:'+acLeftPct+'%;width:'+acWidthPct+'%;background:#a78bfa" data-task=\''+acTtData+'\' onmouseenter="showTT(event,this)" onmouseleave="hideTT()"></div>'+
+              '<div class="today-line" style="left:'+todayPct+'%"></div>'+
+            '</div>'+
+          '</td>';
+        rightTable.appendChild(rac);
+      }
     });
 
     leftSection.appendChild(leftTable);
@@ -1672,7 +1827,81 @@ function positionTT(ev){
   tt.style.left=x+'px';tt.style.top=y+'px';
 }
 function hideTT(){document.getElementById('tooltip').style.display='none';}
+function addTeamMember(){
+  team.push({id:nextTeamId++,name:'Новый сотрудник',role:ROLES[0],utilization:100,vacations:[]});
+  saveTeamAndSettings();
+  renderTeam();
+}
+function removeTeamMember(id){
+  if(!confirm('Удалить сотрудника из команды?'))return;
+  team=team.filter(m=>m.id!==id);
+  saveTeamAndSettings();
+  renderTeam();
+}
+function updateTeamMember(id,field,value){
+  const m=team.find(x=>x.id===id);
+  if(!m)return;
+  if(field==='utilization')value=Math.min(100,Math.max(1,parseFloat(value)||100));
+  m[field]=value;
+  saveTeamAndSettings();
+}
+function addVacation(id){
+  const m=team.find(x=>x.id===id);
+  if(!m)return;
+  const start=toISO(TODAY);
+  const end=toISO(new Date(TODAY.getTime()+7*86400000));
+  m.vacations.push({start,end});
+  saveTeamAndSettings();
+  renderTeam();
+}
+function updateVacation(id,idx,field,value){
+  const m=team.find(x=>x.id===id);
+  if(!m)return;
+  m.vacations[idx][field]=value;
+  saveTeamAndSettings();
+}
+function removeVacation(id,idx){
+  const m=team.find(x=>x.id===id);
+  if(!m)return;
+  m.vacations.splice(idx,1);
+  saveTeamAndSettings();
+  renderTeam();
+}
+function renderTeam(){
+  document.getElementById('setQueueDays').value=planSettings.queueDays;
+  document.getElementById('setTestDays').value=planSettings.testDays;
+  document.getElementById('setOpeDays').value=planSettings.opeDays;
+  const body=document.getElementById('teamTableBody');
+  body.innerHTML='';
+  team.forEach(m=>{
+    const tr=document.createElement('tr');
+    const vacHtml=m.vacations.map((v,vi)=>
+      '<div class="vac-row">'+
+        '<input type="date" value="'+v.start+'" onchange="updateVacation('+m.id+','+vi+',\'start\',this.value)">'+
+        '<span>—</span>'+
+        '<input type="date" value="'+v.end+'" onchange="updateVacation('+m.id+','+vi+',\'end\',this.value)">'+
+        '<span class="vac-del" onclick="removeVacation('+m.id+','+vi+')">✕</span>'+
+      '</div>'
+    ).join('');
+    tr.innerHTML=
+      '<td><input type="text" value="'+m.name.replace(/"/g,'&quot;')+'" onchange="updateTeamMember('+m.id+',\'name\',this.value)"></td>'+
+      '<td><select onchange="updateTeamMember('+m.id+',\'role\',this.value)">'+ROLES.map(r=>'<option value="'+r+'"'+(r===m.role?' selected':'')+'>'+r+'</option>').join('')+'</select></td>'+
+      '<td><input type="number" min="1" max="100" value="'+m.utilization+'" onchange="updateTeamMember('+m.id+',\'utilization\',this.value)"></td>'+
+      '<td>'+vacHtml+'<div class="vac-add" onclick="addVacation('+m.id+')">+ отпуск</div></td>'+
+      '<td><span class="del-btn" onclick="removeTeamMember('+m.id+')" title="Удалить">🗑</span></td>';
+    body.appendChild(tr);
+  });
+}
+document.addEventListener('change',(e)=>{
+  if(e.target&&(e.target.id==='setQueueDays'||e.target.id==='setTestDays'||e.target.id==='setOpeDays')){
+    planSettings.queueDays=parseFloat(document.getElementById('setQueueDays').value)||0;
+    planSettings.testDays=parseFloat(document.getElementById('setTestDays').value)||0;
+    planSettings.opeDays=parseFloat(document.getElementById('setOpeDays').value)||0;
+    saveTeamAndSettings();
+  }
+});
 document.addEventListener('mousemove',e=>{if(document.getElementById('tooltip').style.display==='block')positionTT(e);});
+
 
 // --- Init & auth/filter flow ---
 (function setupPaneSync(){
@@ -1733,8 +1962,14 @@ function onLoggedIn(user,site){
   if(site)BASE=site+'/browse/';
   document.getElementById('userBadge').style.display='flex';
   document.getElementById('userName').textContent='👤 '+user.displayName;
-  showOverlay('filterOverlay');
-  loadFilters('');
+  let last=null;
+  try{last=JSON.parse(localStorage.getItem('gantt_last_filter_v1'));}catch(e){}
+  if(last&&last.id&&last.name){
+    selectFilter(last.id,last.name);
+  } else {
+    showOverlay('filterOverlay');
+    loadFilters('');
+  }
 }
 async function doLogout(){
   await fetch('/api/logout',{method:'POST'});
@@ -1806,8 +2041,39 @@ function computeTimelineRange(){
   TL_END=end;
 }
 
+/* Задачи без оценки в Jira (est=0) переносятся из бэклога на диаграмму с прогнозной
+   датой, рассчитанной с учётом загрузки/отпусков исполнителя и фаз ABAP/тест/ОПЭ.
+   Задачи, у которых оценка в Jira ЕСТЬ, но нет плановых дат — остаются в бэклоге
+   как раньше (требуют решения человека о датах). */
+function applyAutoScheduling(){
+  const stillBacklog=[];
+  const startDate=new Date(TODAY);
+  backlog.forEach(b=>{
+    if(b.est&&b.est>0){stillBacklog.push(b);return;}
+    const sch=computeAutoSchedule(b,startDate);
+    const scheduled={...b,s:toISO(startDate),e:toISO(sch.end),forecast:true};
+    if(b.abapChild){
+      scheduled.abapChild={...b.abapChild,s:toISO(sch.abapStart),e:toISO(sch.abapEnd)};
+    }
+    tasks.push(scheduled);
+  });
+  backlog=stillBacklog;
+}
+function toggleAbapCollapse(key){
+  const t=taskMap[key];
+  if(!t)return;
+  t.collapsed=!t.collapsed;
+  buildGantt();
+  saveState();
+}
+function collapseAllAbap(collapsed){
+  tasks.forEach(t=>{if(t.abapChild)t.collapsed=collapsed;});
+  buildGantt();
+  saveState();
+}
 async function selectFilter(id,name){
   currentFilter={id,name};
+  try{localStorage.setItem('gantt_last_filter_v1',JSON.stringify({id,name}));}catch(e){}
   showOverlay('loadingOverlay');
   document.getElementById('loadingText').textContent='⏳ Загружаем «'+name+'» из Jira…';
   try{
@@ -1823,6 +2089,10 @@ async function selectFilter(id,name){
     backlog=data.backlog;
     STORAGE_KEY='gantt_local_overlay_filter_'+id;
     loadState(); // подмешиваем локальные правки (даты, связи, вехи), сохранённые ранее для этого фильтра
+    tasks.forEach(t=>{ensureTeamMember(t.assignee);if(t.abapChild)ensureTeamMember(t.abapChild.assignee);});
+    backlog.forEach(b=>{ensureTeamMember(b.assignee);if(b.abapChild)ensureTeamMember(b.abapChild.assignee);});
+    applyAutoScheduling();
+    saveTeamAndSettings();
     computeTimelineRange();
     initFilters();
     buildGantt();
@@ -1860,6 +2130,7 @@ async function checkSession(){
     document.getElementById('loginError').style.display='block';
   }
 }
+loadTeamAndSettings();
 checkSession();
 </script>
 </body>
