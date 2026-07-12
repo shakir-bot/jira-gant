@@ -89,10 +89,11 @@
   .col-chart{}
   a.key-link{color:#2563eb;text-decoration:none;font-weight:600;font-size:12px}
   a.key-link:hover{text-decoration:underline}
-  .link-btn{cursor:pointer;color:#cbd5e1;font-size:12px;margin-left:6px;user-select:none}
+  .link-btn{cursor:pointer;color:#cbd5e1;font-size:12px;margin-left:6px;user-select:none;opacity:0;transition:opacity .12s}
   .link-btn:hover{color:#3b82f6}
-  .link-btn.active{color:#2563eb;font-weight:700}
-  .del-btn{cursor:pointer;color:#cbd5e1;font-size:12px;margin-left:5px;user-select:none}
+  .link-btn.active{color:#2563eb;font-weight:700;opacity:1}
+  tr:hover .link-btn,tr:hover .del-btn{opacity:1}
+  .del-btn{cursor:pointer;color:#cbd5e1;font-size:12px;margin-left:5px;user-select:none;opacity:0;transition:opacity .12s}
   .del-btn:hover{color:#dc2626}
   .sys-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.3px;margin-left:6px;vertical-align:middle}
   .summary-text{color:#334155;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;display:block}
@@ -411,6 +412,10 @@
     <input type="text" id="lg-email" placeholder="you@company.com">
     <label>API-токен <span class="hint">создать: id.atlassian.com/manage-profile/security/api-tokens</span></label>
     <input type="password" id="lg-token" placeholder="Вставьте API-токен">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;font-weight:400">
+      <input type="checkbox" id="lg-remember" style="width:auto">
+      Запомнить на этом устройстве <span class="hint">— данные для входа сохранятся в файле рядом с сервером (не в git), чтобы не вводить их заново после перезапуска</span>
+    </label>
     <div id="loginError" style="display:none;color:#dc2626;font-size:12px;margin-top:8px"></div>
     <div class="modal-actions">
       <button class="milestone-btn" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff" onclick="submitLogin()" id="loginBtn">Войти</button>
@@ -1055,13 +1060,13 @@ function handleScheduleDrop(e){
   let startStr=prompt('Дата начала для '+key+' (ГГГГ-ММ-ДД):',todayStr);
   if(startStr===null)return;
   const sD=new Date(startStr+'T00:00:00');
-  if(isNaN(sD.getTime())){alert('Некорректная дата начала.');return;}
+  if(isNaN(sD.getTime())){showToast('Некорректная дата начала.','error');return;}
   const defaultDays=Math.max(Math.round((b.est||28800)/28800),1);
   const defaultEnd=new Date(sD.getTime()+defaultDays*86400000);
   let endStr=prompt('Дата окончания для '+key+' (ГГГГ-ММ-ДД):',toISO(defaultEnd));
   if(endStr===null)return;
   const eD=new Date(endStr+'T00:00:00');
-  if(isNaN(eD.getTime())||eD<sD){alert('Некорректная дата окончания.');return;}
+  if(isNaN(eD.getTime())||eD<sD){showToast('Некорректная дата окончания.','error');return;}
   backlog.splice(idx,1);
   tasks.push({key:b.key,sum:b.sum,s:toISO(sD),e:toISO(eD),status:b.status,assignee:b.assignee,rank:b.rank,priority:b.priority,type:b.type,labels:b.labels,spent:0,est:b.est,rem:b.est,updated:b.updated,flagged:false,custom:b.custom||false});
   initFilters();
@@ -1095,18 +1100,18 @@ function submitAddTask(){
   const endStr=document.getElementById('at-end').value;
   const estDays=parseFloat(document.getElementById('at-est').value)||1;
   if(!key||!/^[A-ZА-Я0-9]+-[A-ZА-Я0-9]+$/i.test(key)){
-    alert('Укажите ключ в формате ПРЕФИКС-НОМЕР, например CUSTOM-1. Префикс определяет группу на диаграмме (EWM/ERP/TEST/ABAP или свой).');
+    showToast('Укажите ключ в формате ПРЕФИКС-НОМЕР, например CUSTOM-1.','error');
     return;
   }
-  if(!sum){alert('Укажите название задачи.');return;}
+  if(!sum){showToast('Укажите название задачи.','error');return;}
   if(tasks.some(t=>t.key===key)||backlog.some(b=>b.key===key)){
-    alert('Задача с ключом '+key+' уже существует.');
+    showToast('Задача с ключом '+key+' уже существует.','error');
     return;
   }
   const sD=new Date(startStr+'T00:00:00');
   const eD=new Date(endStr+'T00:00:00');
   if(isNaN(sD.getTime())||isNaN(eD.getTime())||eD<sD){
-    alert('Проверьте даты начала/окончания.');
+    showToast('Проверьте даты начала/окончания.','error');
     return;
   }
   const rankMap={'Блокирует Бизнес':0,'Критический':1,'Важная':2,'Normal':3,'Незначительный':4};
@@ -1143,32 +1148,74 @@ function onAssigneeInput(value){
     }catch(e){/* тихо игнорируем ошибки автодополнения */}
   },250);
 }
-function showSyncToast(msg,isError){
+function showToast(msg,type){
+  // type: 'success' | 'error' | 'info'
   let el=document.getElementById('syncToast');
   if(!el){
     el=document.createElement('div');
     el.id='syncToast';
-    el.style.cssText='position:fixed;bottom:20px;right:20px;padding:8px 16px;border-radius:8px;font-size:12px;z-index:6000;box-shadow:0 2px 10px rgba(0,0,0,.2);transition:opacity .3s';
+    el.style.cssText='position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:8px;font-size:12px;z-index:6000;box-shadow:0 2px 10px rgba(0,0,0,.2);transition:opacity .3s;max-width:360px;line-height:1.5';
     document.body.appendChild(el);
   }
   el.textContent=msg;
-  el.style.background=isError?'#dc2626':'#16a34a';
+  const colors={success:'#16a34a',error:'#dc2626',info:'#334155'};
+  el.style.background=colors[type]||colors.info;
   el.style.color='#fff';
   el.style.opacity='1';
   clearTimeout(el._t);
-  el._t=setTimeout(()=>{el.style.opacity='0';},2500);
+  el._t=setTimeout(()=>{el.style.opacity='0';},type==='error'?4500:2500);
 }
+function showSyncToast(msg,isError){ showToast(msg,isError?'error':'success'); }
 function findAnyTask(key){
   return taskMap[key]||tasks.find(t=>t.key===key)||backlog.find(b=>b.key===key);
 }
 function startEditCell(e,key,field){
   e.stopPropagation();
   editingCell={key,field};
-  buildGantt();
+  const t=findAnyTask(key);
+  const row=document.querySelector('tr[data-key="'+CSS.escape(key)+'"]');
+  const cell=row&&(field==='assignee'?row.querySelector('.col-assignee'):row.querySelector('.col-status'));
+  if(t&&cell){
+    if(field==='assignee')cell.innerHTML=renderAssigneeCell(key,t.assignee);
+    else{
+      const statusShort=t.status.length>22?t.status.substring(0,20)+'…':t.status;
+      cell.innerHTML=renderStatusCell(key,t.status,statusShort);
+    }
+  }else{
+    buildGantt();
+  }
   setTimeout(()=>{
     const el=document.querySelector('.edit-input[data-key="'+CSS.escape(key)+'"][data-field="'+field+'"]');
     if(el){el.focus();if(el.select)el.select();}
   },0);
+}
+function refreshCardCounts(){
+  buildCards(tasks.filter(matchFilters));
+}
+function refreshEditedRow(key){
+  const t=taskMap[key];
+  if(!t)return false; // не в основном списке (например, задача в бэклоге) — нужен полный рендер
+  const lrow=document.querySelector('#ganttLeftContainer tr[data-key="'+CSS.escape(key)+'"]');
+  if(lrow){
+    const ac=lrow.querySelector('.col-assignee');
+    if(ac)ac.innerHTML=renderAssigneeCell(key,t.assignee);
+    const sc=lrow.querySelector('.col-status');
+    if(sc){
+      const statusShort=t.status.length>22?t.status.substring(0,20)+'…':t.status;
+      sc.innerHTML=renderStatusCell(key,t.status,statusShort);
+    }
+  }
+  const bar=document.querySelector('.bar[data-key="'+CSS.escape(key)+'"]');
+  if(bar){
+    bar.style.background=barColor(t.status);
+    try{
+      const ttData=JSON.parse(bar.dataset.task);
+      ttData.a=t.assignee;ttData.st=t.status;
+      bar.dataset.task=JSON.stringify(ttData);
+    }catch(e){/* тултип просто не обновится до следующей полной перерисовки */}
+  }
+  refreshCardCounts();
+  return true;
 }
 async function commitEditCell(key,field,value){
   const t=findAnyTask(key);
@@ -1178,7 +1225,7 @@ async function commitEditCell(key,field,value){
     const newVal=value.trim()||'—';
     const changed=newVal!==t.assignee;
     t.assignee=newVal;
-    buildGantt();
+    if(!refreshEditedRow(key))buildGantt();
     saveState();
     if(changed&&!t.custom){
       const accountId=userSuggestionMap[newVal];
@@ -1196,7 +1243,7 @@ async function commitEditCell(key,field,value){
   } else if(field==='status'){
     const changed=value!==t.status;
     t.status=value;
-    buildGantt();
+    if(!refreshEditedRow(key))buildGantt();
     saveState();
     if(changed&&!t.custom){
       try{
@@ -1329,7 +1376,7 @@ function addMilestone(){
   if(dateStr===null)return;
   const d=new Date(dateStr+'T00:00:00');
   if(isNaN(d.getTime())){
-    alert('Некорректная дата. Используйте формат ГГГГ-ММ-ДД.');
+    showToast('Некорректная дата. Используйте формат ГГГГ-ММ-ДД.','error');
     return;
   }
   milestones.push({id:'m'+Date.now()+Math.floor(Math.random()*1000),date:toISO(d),title:title.trim()});
@@ -1774,6 +1821,7 @@ function buildGantt(){
   bb.innerHTML='';
   bFiltered.forEach(b=>{
     const tr=document.createElement('tr');
+    tr.dataset.key=b.key;
     tr.style.cursor='pointer';
     tr.draggable=true;
     tr.ondragstart=(ev)=>{handleBacklogDragStart(ev,b.key);};
@@ -1939,11 +1987,12 @@ async function submitLogin(){
   const site=document.getElementById('lg-site').value.trim();
   const email=document.getElementById('lg-email').value.trim();
   const apiToken=document.getElementById('lg-token').value.trim();
+  const remember=document.getElementById('lg-remember').checked;
   const errEl=document.getElementById('loginError');
   errEl.style.display='none';
   document.getElementById('loginBtn').textContent='Проверка…';
   try{
-    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({site,email,apiToken})});
+    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({site,email,apiToken,remember})});
     const data=await r.json();
     if(!r.ok){
       errEl.textContent=data.error||'Не удалось войти';
@@ -2081,7 +2130,7 @@ async function selectFilter(id,name){
     const data=await r.json();
     if(!r.ok){
       hideAllOverlays();
-      alert('Ошибка загрузки: '+(data.error||'неизвестная ошибка'));
+      showToast('Ошибка загрузки: '+(data.error||'неизвестная ошибка'),'error');
       showOverlay('filterOverlay');
       return;
     }
@@ -2104,7 +2153,7 @@ async function selectFilter(id,name){
     hideAllOverlays();
   }catch(e){
     hideAllOverlays();
-    alert('Не удалось загрузить данные: '+e.message);
+    showToast('Не удалось загрузить данные: '+e.message,'error');
     showOverlay('filterOverlay');
   }
 }
@@ -2121,6 +2170,7 @@ async function checkSession(){
     const data=await r.json();
     if(data.loggedIn){
       onLoggedIn(data.user,data.site);
+      if(data.restored)setTimeout(()=>showToast('Вход выполнен автоматически (данные сохранены на этом устройстве)','info'),400);
     } else {
       showOverlay('loginOverlay');
     }

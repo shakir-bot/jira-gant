@@ -5,9 +5,22 @@ const express = require('express');
 const session = require('express-session');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3210;
+
+// ---- «Запомнить на этом устройстве»: локальный файл рядом с сервером, в .gitignore ----
+const CONFIG_PATH = path.join(__dirname, '.jira-config.json');
+function loadSavedConfig() {
+  try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); } catch (e) { return null; }
+}
+function saveConfigToDisk(cfg) {
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), { encoding: 'utf8', mode: 0o600 });
+}
+function clearSavedConfig() {
+  try { fs.unlinkSync(CONFIG_PATH); } catch (e) { /* уже отсутствует */ }
+}
 
 // ---- Настройки полей Jira (специфичны для конкретного проекта/инстанса) ----
 // Если диаграмма строится для другого проекта Jira, замените ID полей ниже
@@ -74,7 +87,7 @@ async function jiraFetch(req, apiPath, options = {}) {
 // ---- Авторизация ----
 app.post('/api/login', async (req, res) => {
   try {
-    const { site, email, apiToken } = req.body;
+    const { site, email, apiToken, remember } = req.body;
     if (!site || !email || !apiToken) {
       return res.status(400).json({ error: 'Укажите адрес Jira, email и API-токен.' });
     }
@@ -92,6 +105,11 @@ app.post('/api/login', async (req, res) => {
     const me = await meRes.json();
     req.session.jira = { site: normalizedSite, email, apiToken };
     req.session.user = { displayName: me.displayName, avatarUrl: me.avatarUrls && me.avatarUrls['32x32'] };
+    if (remember) {
+      saveConfigToDisk({ site: normalizedSite, email, apiToken, displayName: me.displayName, avatarUrl: req.session.user.avatarUrl });
+    } else {
+      clearSavedConfig();
+    }
     res.json({ ok: true, user: req.session.user, site: normalizedSite });
   } catch (e) {
     console.error(e);
@@ -100,15 +118,32 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
+  clearSavedConfig();
   req.session.destroy(() => res.json({ ok: true }));
 });
 
-app.get('/api/session', (req, res) => {
+app.get('/api/session', async (req, res) => {
   if (req.session.jira && req.session.user) {
-    res.json({ loggedIn: true, user: req.session.user, site: req.session.jira.site });
-  } else {
-    res.json({ loggedIn: false });
+    return res.json({ loggedIn: true, user: req.session.user, site: req.session.jira.site });
   }
+  // Сессия истекла/сервер перезапущен — пробуем восстановить из сохранённых на диске данных
+  const saved = loadSavedConfig();
+  if (saved && saved.site && saved.email && saved.apiToken) {
+    try {
+      const auth = Buffer.from(saved.email + ':' + saved.apiToken).toString('base64');
+      const meRes = await fetch(saved.site + '/rest/api/3/myself', {
+        headers: { 'Authorization': 'Basic ' + auth, 'Accept': 'application/json' }
+      });
+      if (meRes.ok) {
+        const me = await meRes.json();
+        req.session.jira = { site: saved.site, email: saved.email, apiToken: saved.apiToken };
+        req.session.user = { displayName: me.displayName, avatarUrl: me.avatarUrls && me.avatarUrls['32x32'] };
+        return res.json({ loggedIn: true, user: req.session.user, site: saved.site, restored: true });
+      }
+    } catch (e) { /* сохранённые данные недействительны — падаем в обычный логин ниже */ }
+    clearSavedConfig();
+  }
+  res.json({ loggedIn: false });
 });
 
 // ---- Список фильтров пользователя (избранные + поиск по имени) ----
