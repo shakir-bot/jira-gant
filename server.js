@@ -11,13 +11,18 @@ const os = require('os');
 const app = express();
 const PORT = process.env.PORT || 3210;
 
+// Внутри exe, собранного через pkg, __dirname указывает на виртуальный снапшот
+// (только для чтения) — файлы, в которые нужно писать, кладём рядом с самим
+// исполняемым файлом (process.execPath), а не внутрь снапшота.
+const WRITABLE_DIR = process.pkg ? path.dirname(process.execPath) : __dirname;
+
 // ---- «Запомнить на этом устройстве»: локальный файл рядом с сервером, в .gitignore ----
 // Несколько человек могут одновременно работать с одним и тем же запущенным сервером
 // (например, зайдя на него по локальной сети с разных компьютеров), поэтому «запомненные»
 // данные входа хранятся не одним объектом, а по устройствам — ключ - случайный id в
 // отдельной httpOnly-куке браузера (deviceId), не связанной с сессией. Так вход одного
 // человека с галочкой «запомнить» не перезаписывает и не подменяет вход другого.
-const CONFIG_PATH = path.join(__dirname, '.jira-config.json');
+const CONFIG_PATH = path.join(WRITABLE_DIR, '.jira-config.json');
 const DEVICE_COOKIE = 'deviceId';
 const DEVICE_COOKIE_MAX_AGE_SEC = 400 * 24 * 60 * 60; // ~400 дней (максимум, который принимают браузеры)
 
@@ -389,6 +394,15 @@ app.patch('/api/issues/:key/status', async (req, res) => {
   }
 });
 
+// Автоматически открывает системный браузер — удобно для portable exe (собран через
+// pkg), где нет ни терминала с явным npm-логом, ни привычки самому набирать localhost.
+function openBrowser(url) {
+  const cmd = process.platform === 'darwin' ? 'open'
+    : process.platform === 'win32' ? 'start ""'
+    : 'xdg-open';
+  require('child_process').exec(cmd + ' ' + url, () => {});
+}
+
 app.listen(PORT, () => {
   console.log('');
   console.log('  Гант + Jira запущен:');
@@ -402,4 +416,5 @@ app.listen(PORT, () => {
   }
   console.log('  Остановить сервер: Ctrl+C');
   console.log('');
+  if (process.pkg) openBrowser('http://localhost:' + PORT);
 });

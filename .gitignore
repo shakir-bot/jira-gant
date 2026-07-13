@@ -2,3 +2,4 @@ node_modules/
 *.log
 .DS_Store
 .jira-config.json
+dist/
