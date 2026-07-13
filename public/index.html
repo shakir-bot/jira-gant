@@ -93,6 +93,12 @@
   .link-btn:hover{color:#3b82f6}
   .link-btn.active{color:#2563eb;font-weight:700;opacity:1}
   tr:hover .link-btn,tr:hover .del-btn{opacity:1}
+  .context-menu{position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:7000;min-width:220px;padding:6px;font-size:13px}
+  .context-menu-item{padding:8px 12px;border-radius:6px;cursor:pointer;color:#334155;white-space:nowrap}
+  .context-menu-item:hover{background:#f0f9ff;color:#2563eb}
+  .context-menu-item.danger:hover{background:#fef2f2;color:#dc2626}
+  .context-menu-sep{height:1px;background:#f1f5f9;margin:4px 6px}
+  tr.link-source-row td{background:#eff6ff !important;box-shadow:inset 3px 0 0 #3b82f6}
   .del-btn{cursor:pointer;color:#cbd5e1;font-size:12px;margin-left:5px;user-select:none;opacity:0;transition:opacity .12s}
   .del-btn:hover{color:#dc2626}
   .sys-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.3px;margin-left:6px;vertical-align:middle}
@@ -113,6 +119,9 @@
   .modal-row{display:flex;gap:12px}
   .modal-row>div{flex:1}
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+  .color-swatches{display:flex;gap:8px;margin-top:4px}
+  .color-swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px}
+  .color-swatch.selected{border-color:#0f172a;box-shadow:0 0 0 2px #fff inset}
   .filter-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;display:flex;justify-content:space-between;align-items:center}
   .filter-item:last-child{border-bottom:none}
   .filter-item:hover{background:#f0f9ff}
@@ -334,12 +343,12 @@
 </div>
 
 <div class="milestones-bar" id="milestonesBar">
-  <button class="milestone-btn" onclick="addMilestone()">📍 + Веха</button>
+  <button class="milestone-btn" onclick="openMilestoneModal()">📍 + Веха</button>
   <button class="milestone-btn" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff" onclick="openAddTaskModal()">➕ Новая задача</button>
   <span id="milestoneChips"></span>
 </div>
 
-<div class="instructions" id="instructionsBar">⠿ — перетащите мышкой вверх/вниз, чтобы изменить порядок · перетащите сам бар — сдвинуть даты · ⇔ края бара — изменить длительность · 🔗 — создать связь между задачами · 🗑 — удалить задачу · клик по линии связи — удалить её</div>
+<div class="instructions" id="instructionsBar">⠿ — перетащите мышкой вверх/вниз, чтобы изменить порядок · перетащите сам бар — сдвинуть даты · ⇔ края бара — изменить длительность · клик правой кнопкой мыши на задаче — связи, удаление и другие действия · клик по линии связи — удалить её</div>
 
 <div class="gantt-split" id="ganttWrapper" ondragover="event.preventDefault();document.getElementById('ganttWrapper').classList.add('drag-over-zone')" ondragleave="document.getElementById('ganttWrapper').classList.remove('drag-over-zone')" ondrop="handleScheduleDrop(event)">
   <div class="gantt-left-pane" id="ganttLeftPane"><div id="ganttLeftContainer"></div></div>
@@ -401,6 +410,7 @@
 <div class="footer" id="footerText">Изменения сохраняются локально в браузере • Оценки в человеко-днях (1 чд = 8 часов)</div>
 
 <div class="tooltip" id="tooltip"></div>
+<div class="context-menu" id="rowContextMenu" style="display:none"></div>
 
 <div class="modal-overlay" id="loginOverlay" style="display:flex">
   <div class="modal-box">
@@ -437,6 +447,22 @@
 <div class="modal-overlay" id="loadingOverlay">
   <div class="modal-box" style="text-align:center">
     <h3 id="loadingText">⏳ Загрузка задач из Jira…</h3>
+  </div>
+</div>
+
+<div class="modal-overlay" id="milestoneModal">
+  <div class="modal-box">
+    <h3>📍 Новая веха</h3>
+    <label>Название</label>
+    <input type="text" id="ms-title" placeholder="Например: Начало интеграционного тестирования">
+    <label>Дата</label>
+    <input type="date" id="ms-date">
+    <label>Цвет флажка</label>
+    <div class="color-swatches" id="ms-colors"></div>
+    <div class="modal-actions">
+      <button class="reset-btn" onclick="closeMilestoneModal()">Отмена</button>
+      <button class="milestone-btn" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff" onclick="submitMilestone()">Создать</button>
+    </div>
   </div>
 </div>
 
@@ -1030,8 +1056,7 @@ function buildCards(filtered){
 }
 
 // --- Delete ---
-function handleDelete(e,key,isBacklog){
-  e.stopPropagation();
+function handleDelete(key,isBacklog){
   if(!confirm('Удалить задачу '+key+'?'))return;
   if(isBacklog){
     backlog=backlog.filter(b=>b.key!==key);
@@ -1316,15 +1341,15 @@ function onRowDragEnd(e){
 
 // --- Linking ---
 function updateLinkModeUI(){
-  document.querySelectorAll('.link-btn').forEach(btn=>{
-    btn.classList.toggle('active', btn.dataset.linkkey===linkSource);
+  document.querySelectorAll('tr[data-key]').forEach(tr=>{
+    tr.classList.toggle('link-source-row', tr.dataset.key===linkSource);
   });
   const bar=document.getElementById('instructionsBar');
   if(linkSource){
-    bar.textContent='🔗 Связь: выбрана '+linkSource+'. Кликните 🔗 у второй задачи, чтобы создать связь (или снова на 🔗 у '+linkSource+', чтобы отменить).';
+    bar.textContent='🔗 Связь: выбрана '+linkSource+'. Кликните правой кнопкой мыши на второй задаче и выберите «Связать», либо снова правой кнопкой на '+linkSource+' — «Отменить выбор связи».';
     bar.style.color='#2563eb';
   } else {
-    bar.textContent='⠿ — перетащите мышкой вверх/вниз, чтобы изменить порядок · перетащите сам бар — сдвинуть даты · ⇔ края бара — изменить длительность · 🔗 — создать связь между задачами · 🗑 — удалить задачу · клик по линии связи — удалить её';
+    bar.textContent='⠿ — перетащите мышкой вверх/вниз, чтобы изменить порядок · перетащите сам бар — сдвинуть даты · ⇔ края бара — изменить длительность · клик правой кнопкой мыши на задаче — связи, удаление и другие действия · клик по линии связи — удалить её';
     bar.style.color='#94a3b8';
   }
 }
@@ -1350,7 +1375,7 @@ function cascadeFromTask(key,visited){
   });
 }
 function handleLinkClick(e,key){
-  e.stopPropagation();
+  if(e&&e.stopPropagation)e.stopPropagation();
   if(linkSource===null){
     linkSource=key;
     updateLinkModeUI();
@@ -1368,7 +1393,103 @@ function handleLinkClick(e,key){
   }
 }
 
+// --- Контекстное меню строки (правый клик): связи, удаление, открыть в Jira ---
+function hideContextMenu(){
+  const m=document.getElementById('rowContextMenu');
+  if(m)m.style.display='none';
+}
+function addMenuItem(menu,label,action,danger){
+  const div=document.createElement('div');
+  div.className='context-menu-item'+(danger?' danger':'');
+  div.textContent=label;
+  div.onclick=(ev)=>{ev.stopPropagation();hideContextMenu();action();};
+  menu.appendChild(div);
+}
+function showRowContextMenu(e,key,isBacklog){
+  e.preventDefault();
+  e.stopPropagation();
+  const t=findAnyTask(key);
+  if(!t)return;
+  const menu=document.getElementById('rowContextMenu');
+  menu.innerHTML='';
+  if(!isBacklog){
+    if(linkSource===key){
+      addMenuItem(menu,'✕ Отменить выбор связи',()=>{linkSource=null;updateLinkModeUI();});
+    } else if(linkSource===null){
+      addMenuItem(menu,'🔗 Начать связь от этой задачи',()=>{linkSource=key;updateLinkModeUI();});
+    } else {
+      addMenuItem(menu,'🔗 Связать: '+linkSource+' → '+key,()=>handleLinkClick(null,key));
+      addMenuItem(menu,'✕ Отменить выбор связи ('+linkSource+')',()=>{linkSource=null;updateLinkModeUI();});
+    }
+    const div=document.createElement('div');
+    div.className='context-menu-sep';
+    menu.appendChild(div);
+  }
+  if(!t.custom){
+    addMenuItem(menu,'🔵 Открыть в Jira',()=>window.open(BASE+key,'_blank'));
+  }
+  addMenuItem(menu,'🗑 Удалить задачу',()=>handleDelete(key,isBacklog),true);
+  menu.style.display='block';
+  const mw=220,mh=menu.querySelectorAll('.context-menu-item').length*34+16;
+  const x=Math.min(e.clientX,window.innerWidth-mw-10);
+  const y=Math.min(e.clientY,window.innerHeight-mh-10);
+  menu.style.left=x+'px';
+  menu.style.top=y+'px';
+}
+document.addEventListener('click',hideContextMenu);
+document.addEventListener('contextmenu',(e)=>{
+  if(!e.target.closest('tr[data-key]'))hideContextMenu();
+});
+
 // --- Milestones ---
+const MILESTONE_COLORS=[
+  {name:'purple',strong:'#7c3aed',bg:'#f5f3ff',border:'#ddd6fe'},
+  {name:'red',strong:'#dc2626',bg:'#fef2f2',border:'#fecaca'},
+  {name:'orange',strong:'#ea580c',bg:'#fff7ed',border:'#fed7aa'},
+  {name:'amber',strong:'#d97706',bg:'#fffbeb',border:'#fde68a'},
+  {name:'green',strong:'#16a34a',bg:'#f0fdf4',border:'#bbf7d0'},
+  {name:'teal',strong:'#0d9488',bg:'#f0fdfa',border:'#99f6e4'},
+  {name:'blue',strong:'#2563eb',bg:'#eff6ff',border:'#bfdbfe'},
+  {name:'pink',strong:'#db2777',bg:'#fdf2f8',border:'#fbcfe8'}
+];
+let selectedMilestoneColor=MILESTONE_COLORS[0].name;
+function getMilestoneColor(name){
+  return MILESTONE_COLORS.find(c=>c.name===name)||MILESTONE_COLORS[0];
+}
+function openMilestoneModal(){
+  document.getElementById('ms-title').value='';
+  document.getElementById('ms-date').value=toISO(TODAY);
+  selectedMilestoneColor=MILESTONE_COLORS[0].name;
+  const box=document.getElementById('ms-colors');
+  box.innerHTML='';
+  MILESTONE_COLORS.forEach(c=>{
+    const sw=document.createElement('div');
+    sw.className='color-swatch'+(c.name===selectedMilestoneColor?' selected':'');
+    sw.style.background=c.strong;
+    sw.dataset.color=c.name;
+    sw.onclick=()=>{
+      selectedMilestoneColor=c.name;
+      box.querySelectorAll('.color-swatch').forEach(s=>s.classList.toggle('selected',s.dataset.color===c.name));
+    };
+    box.appendChild(sw);
+  });
+  document.getElementById('milestoneModal').style.display='flex';
+  document.getElementById('ms-title').focus();
+}
+function closeMilestoneModal(){
+  document.getElementById('milestoneModal').style.display='none';
+}
+function submitMilestone(){
+  const title=document.getElementById('ms-title').value.trim();
+  const dateStr=document.getElementById('ms-date').value;
+  if(!title){showToast('Укажите название вехи.','error');return;}
+  const d=new Date(dateStr+'T00:00:00');
+  if(isNaN(d.getTime())){showToast('Некорректная дата.','error');return;}
+  milestones.push({id:'m'+Date.now()+Math.floor(Math.random()*1000),date:toISO(d),title,color:selectedMilestoneColor});
+  closeMilestoneModal();
+  buildGantt();
+  saveState();
+}
 function addMilestone(){
   const title=prompt('Название вехи (например: "Начало интеграционного тестирования"):');
   if(title===null||title.trim()==='')return;
@@ -1379,7 +1500,7 @@ function addMilestone(){
     showToast('Некорректная дата. Используйте формат ГГГГ-ММ-ДД.','error');
     return;
   }
-  milestones.push({id:'m'+Date.now()+Math.floor(Math.random()*1000),date:toISO(d),title:title.trim()});
+  milestones.push({id:'m'+Date.now()+Math.floor(Math.random()*1000),date:toISO(d),title:title.trim(),color:MILESTONE_COLORS[0].name});
   buildGantt();
   saveState();
 }
@@ -1395,8 +1516,12 @@ function renderMilestoneChips(){
   const el=document.getElementById('milestoneChips');
   el.innerHTML='';
   milestones.slice().sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(m=>{
+    const c=getMilestoneColor(m.color);
     const chip=document.createElement('span');
     chip.className='milestone-chip';
+    chip.style.background=c.bg;
+    chip.style.borderColor=c.border;
+    chip.style.color=c.strong;
     chip.innerHTML='◆ '+m.title+' ('+fmtDate(m.date)+') <span class="mx" onclick="removeMilestone(\''+m.id+'\')">✕</span>';
     el.appendChild(chip);
   });
@@ -1575,16 +1700,19 @@ function drawMilestones(){
   overlay.style.height=container.scrollHeight+'px';
   overlay.style.pointerEvents='none';
   milestones.forEach(m=>{
+    const c=getMilestoneColor(m.color);
     const pct=dayPos(m.date+'T00:00:00');
     const x=offsetX+(pct/100)*cellWidth;
     const line=document.createElement('div');
     line.className='milestone-line';
     line.style.left=x+'px';
     line.style.height=container.scrollHeight+'px';
+    line.style.borderLeftColor=c.strong;
     overlay.appendChild(line);
     const marker=document.createElement('div');
     marker.className='milestone-marker';
     marker.style.left=x+'px';
+    marker.style.background=c.strong;
     marker.style.pointerEvents='auto';
     marker.title=m.title+' — '+fmtDate(m.date);
     marker.onclick=()=>removeMilestone(m.id);
@@ -1719,7 +1847,6 @@ function buildGantt(){
       const statusShort=t.status.length>22?t.status.substring(0,20)+'…':t.status;
       const flagClass=t.flagged?' flagged':'';
       const estDisplay=fmtDshort(t.est);
-      const linkActiveClass=(linkSource===t.key)?' active':'';
       const sysLabel=(groupBy!=='system')?('<span class="sys-badge '+sysCssClass(systemOf(t.key))+'">'+systemOf(t.key)+'</span>'):'';
       const keyHtml=t.custom?('<span class="key-link" style="cursor:default;color:#0f172a" title="Задача создана вручную, не в Jira">'+t.key+' ✎</span>'):('<a class="key-link" href="'+BASE+t.key+'" target="_blank" onclick="event.stopPropagation()">'+t.key+'</a>');
       const forecastBadge=t.forecast?'<span class="forecast-badge" title="Даты рассчитаны автоматически — в Jira для этой задачи нет оценки">прогноз</span>':'';
@@ -1736,14 +1863,13 @@ function buildGantt(){
       };
 
       const ltr=document.createElement('tr');
-      ltr.className='task-row';
+      ltr.className='task-row'+(linkSource===t.key?' link-source-row':'');
       ltr.dataset.key=t.key;
       ltr.onclick=rowClickHandler;
+      ltr.oncontextmenu=(ev)=>showRowContextMenu(ev,t.key,false);
       ltr.innerHTML=
         '<td class="col-order"><span class="drag-handle" onpointerdown="startRowDrag(event,\''+ordKey+'\',\''+t.key+'\')" title="Перетащите мышкой, чтобы изменить порядок">⠿</span></td>'+
         '<td class="col-key">'+collapseToggle+keyHtml+sysLabel+forecastBadge+abapBadge+collapsedAbapBadge+
-          '<span class="link-btn'+linkActiveClass+'" data-linkkey="'+t.key+'" onclick="handleLinkClick(event,\''+t.key+'\')" title="Создать связь">🔗</span>'+
-          '<span class="del-btn" onclick="handleDelete(event,\''+t.key+'\',false)" title="Удалить задачу">🗑</span>'+
         '</td>'+
         '<td class="col-summary"><span class="summary-text" title="'+t.sum.replace(/"/g,'&quot;')+'">'+t.sum+'</span></td>'+
         '<td class="col-assignee">'+renderAssigneeCell(t.key,t.assignee)+'</td>'+
@@ -1829,9 +1955,9 @@ function buildGantt(){
       if(window.__ganttSuppressClick){window.__ganttSuppressClick=false;return;}
       window.open(BASE+b.key,'_blank');
     };
+    tr.oncontextmenu=(ev)=>showRowContextMenu(ev,b.key,true);
     tr.innerHTML=
       '<td><span class="drag-handle" title="Перетащите в диаграмму, чтобы запланировать" style="cursor:grab">⠿</span><a class="key-link" href="'+BASE+b.key+'" target="_blank" onclick="event.stopPropagation()">'+b.key+'</a>'+
-        '<span class="del-btn" onclick="handleDelete(event,\''+b.key+'\',true)" title="Удалить задачу">🗑</span>'+
       '</td>'+
       '<td><span class="sys-badge '+sysCssClass(systemOf(b.key))+'">'+systemOf(b.key)+'</span></td>'+
       '<td><span class="summary-text" style="max-width:380px" title="'+b.sum.replace(/"/g,'&quot;')+'">'+b.sum+'</span></td>'+
