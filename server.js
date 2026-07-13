@@ -6,20 +6,69 @@ const session = require('express-session');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const app = express();
 const PORT = process.env.PORT || 3210;
 
 // ---- «Запомнить на этом устройстве»: локальный файл рядом с сервером, в .gitignore ----
+// Несколько человек могут одновременно работать с одним и тем же запущенным сервером
+// (например, зайдя на него по локальной сети с разных компьютеров), поэтому «запомненные»
+// данные входа хранятся не одним объектом, а по устройствам — ключ - случайный id в
+// отдельной httpOnly-куке браузера (deviceId), не связанной с сессией. Так вход одного
+// человека с галочкой «запомнить» не перезаписывает и не подменяет вход другого.
 const CONFIG_PATH = path.join(__dirname, '.jira-config.json');
-function loadSavedConfig() {
-  try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); } catch (e) { return null; }
+const DEVICE_COOKIE = 'deviceId';
+const DEVICE_COOKIE_MAX_AGE_SEC = 400 * 24 * 60 * 60; // ~400 дней (максимум, который принимают браузеры)
+
+function loadDevices() {
+  try {
+    const data = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    return (data && typeof data.devices === 'object' && data.devices) ? data.devices : {};
+  } catch (e) { return {}; }
 }
-function saveConfigToDisk(cfg) {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), { encoding: 'utf8', mode: 0o600 });
+function saveDevices(devices) {
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify({ devices }, null, 2), { encoding: 'utf8', mode: 0o600 });
 }
-function clearSavedConfig() {
-  try { fs.unlinkSync(CONFIG_PATH); } catch (e) { /* уже отсутствует */ }
+function getDeviceId(req) {
+  const raw = req.headers.cookie || '';
+  const found = raw.split(';').map(s => s.trim()).find(s => s.startsWith(DEVICE_COOKIE + '='));
+  return found ? decodeURIComponent(found.slice(DEVICE_COOKIE.length + 1)) : null;
+}
+function setDeviceCookie(res, id) {
+  res.append('Set-Cookie', DEVICE_COOKIE + '=' + encodeURIComponent(id) +
+    '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + DEVICE_COOKIE_MAX_AGE_SEC);
+}
+function clearDeviceCookie(res) {
+  res.append('Set-Cookie', DEVICE_COOKIE + '=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+}
+function loadSavedConfigForDevice(deviceId) {
+  if (!deviceId) return null;
+  const devices = loadDevices();
+  return devices[deviceId] || null;
+}
+function saveConfigForDevice(deviceId, cfg) {
+  const devices = loadDevices();
+  devices[deviceId] = cfg;
+  saveDevices(devices);
+}
+function clearConfigForDevice(deviceId) {
+  if (!deviceId) return;
+  const devices = loadDevices();
+  if (devices[deviceId]) {
+    delete devices[deviceId];
+    saveDevices(devices);
+  }
+}
+function lanAddresses() {
+  const nets = os.networkInterfaces();
+  const out = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) out.push(net.address);
+    }
+  }
+  return out;
 }
 
 // ---- Настройки полей Jira (специфичны для конкретного проекта/инстанса) ----
@@ -105,10 +154,13 @@ app.post('/api/login', async (req, res) => {
     const me = await meRes.json();
     req.session.jira = { site: normalizedSite, email, apiToken };
     req.session.user = { displayName: me.displayName, avatarUrl: me.avatarUrls && me.avatarUrls['32x32'] };
+
+    let deviceId = getDeviceId(req);
     if (remember) {
-      saveConfigToDisk({ site: normalizedSite, email, apiToken, displayName: me.displayName, avatarUrl: req.session.user.avatarUrl });
-    } else {
-      clearSavedConfig();
+      if (!deviceId) { deviceId = crypto.randomUUID(); setDeviceCookie(res, deviceId); }
+      saveConfigForDevice(deviceId, { site: normalizedSite, email, apiToken, displayName: me.displayName, avatarUrl: req.session.user.avatarUrl });
+    } else if (deviceId) {
+      clearConfigForDevice(deviceId);
     }
     res.json({ ok: true, user: req.session.user, site: normalizedSite });
   } catch (e) {
@@ -118,7 +170,8 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-  clearSavedConfig();
+  clearConfigForDevice(getDeviceId(req));
+  clearDeviceCookie(res);
   req.session.destroy(() => res.json({ ok: true }));
 });
 
@@ -126,8 +179,9 @@ app.get('/api/session', async (req, res) => {
   if (req.session.jira && req.session.user) {
     return res.json({ loggedIn: true, user: req.session.user, site: req.session.jira.site });
   }
-  // Сессия истекла/сервер перезапущен — пробуем восстановить из сохранённых на диске данных
-  const saved = loadSavedConfig();
+  // Сессия истекла/сервер перезапущен — пробуем восстановить данные, запомненные
+  // именно для этого браузера/устройства (см. DEVICE_COOKIE выше)
+  const saved = loadSavedConfigForDevice(getDeviceId(req));
   if (saved && saved.site && saved.email && saved.apiToken) {
     try {
       const auth = Buffer.from(saved.email + ':' + saved.apiToken).toString('base64');
@@ -141,7 +195,7 @@ app.get('/api/session', async (req, res) => {
         return res.json({ loggedIn: true, user: req.session.user, site: saved.site, restored: true });
       }
     } catch (e) { /* сохранённые данные недействительны — падаем в обычный логин ниже */ }
-    clearSavedConfig();
+    clearConfigForDevice(getDeviceId(req));
   }
   res.json({ loggedIn: false });
 });
@@ -337,7 +391,15 @@ app.patch('/api/issues/:key/status', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log('');
-  console.log('  Гант + Jira запущен: http://localhost:' + PORT);
+  console.log('  Гант + Jira запущен:');
+  console.log('    на этом компьютере:  http://localhost:' + PORT);
+  lanAddresses().forEach(ip => {
+    console.log('    из локальной сети:   http://' + ip + ':' + PORT);
+  });
+  if (lanAddresses().length) {
+    console.log('  (для доступа с других компьютеров в той же сети/Wi-Fi может понадобиться');
+    console.log('   разрешить входящие соединения на этот порт в файрволе)');
+  }
   console.log('  Остановить сервер: Ctrl+C');
   console.log('');
 });
