@@ -6,9 +6,23 @@ const session = require('express-session');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const { ProxyAgent, setGlobalDispatcher } = require('undici');
 
 const app = express();
 const PORT = process.env.PORT || 3210;
+
+// ---- Корпоративный прокси: если ноутбук ходит в интернет только через прокси,
+// сервер сам через него сходит в Jira. Укажите адрес прокси в переменной окружения
+// HTTPS_PROXY (или HTTP_PROXY) перед запуском — см. start.bat/README.
+const PROXY_URL = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+if (PROXY_URL) {
+  try {
+    setGlobalDispatcher(new ProxyAgent(PROXY_URL));
+    console.log('  Использую прокси для запросов к Jira: ' + PROXY_URL);
+  } catch (e) {
+    console.error('  Не удалось настроить прокси ' + PROXY_URL + ': ' + e.message);
+  }
+}
 
 // ---- «Запомнить на этом устройстве»: локальный файл рядом с сервером, в .gitignore ----
 const CONFIG_PATH = path.join(__dirname, '.jira-config.json');
@@ -84,6 +98,20 @@ async function jiraFetch(req, apiPath, options = {}) {
   return res;
 }
 
+// ---- Понятное сообщение вместо технического "fetch failed" ----
+function friendlyNetworkError(e) {
+  const code = e && e.cause && e.cause.code;
+  if (e.message === 'fetch failed' || code) {
+    let hint = 'Не удалось подключиться к Jira по сети.';
+    if (code === 'ENOTFOUND') hint += ' Проверьте правильность адреса сайта Jira (например detmir.atlassian.net).';
+    else if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT') hint += ' Похоже, соединение блокируется — часто это корпоративный прокси.';
+    else hint += ' Часто причина — корпоративный прокси-сервер, через который ноутбук ходит в интернет.';
+    hint += ' Если на этом компьютере интернет только через прокси, укажите его адрес в переменной окружения HTTPS_PROXY перед запуском (см. README, раздел «Корпоративный прокси»).';
+    return hint;
+  }
+  return 'Внутренняя ошибка: ' + e.message;
+}
+
 // ---- Авторизация ----
 app.post('/api/login', async (req, res) => {
   try {
@@ -113,7 +141,7 @@ app.post('/api/login', async (req, res) => {
     res.json({ ok: true, user: req.session.user, site: normalizedSite });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: 'Внутренняя ошибка: ' + e.message });
+    res.status(500).json({ error: friendlyNetworkError(e) });
   }
 });
 
@@ -167,7 +195,7 @@ app.get('/api/filters', async (req, res) => {
     }
     res.json({ filters: results });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: friendlyNetworkError(e) });
   }
 });
 
@@ -287,7 +315,7 @@ app.get('/api/users', async (req, res) => {
     const list = await r.json();
     res.json({ users: list.map(u => ({ accountId: u.accountId, displayName: u.displayName })) });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: friendlyNetworkError(e) });
   }
 });
 
@@ -305,7 +333,7 @@ app.patch('/api/issues/:key/assignee', async (req, res) => {
     }
     res.json({ ok: true });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: friendlyNetworkError(e) });
   }
 });
 
@@ -331,7 +359,7 @@ app.patch('/api/issues/:key/status', async (req, res) => {
     }
     res.json({ ok: true });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: friendlyNetworkError(e) });
   }
 });
 
