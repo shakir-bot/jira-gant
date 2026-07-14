@@ -157,10 +157,16 @@ function friendlyNetworkError(e) {
   const code = e && e.cause && e.cause.code;
   if (e.message === 'fetch failed' || code) {
     let hint = 'Не удалось подключиться к Jira по сети.';
-    if (code === 'ENOTFOUND') hint += ' Проверьте правильность адреса сайта Jira (например detmir.atlassian.net).';
-    else if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT') hint += ' Похоже, соединение блокируется — часто это корпоративный прокси.';
-    else hint += ' Часто причина — корпоративный прокси-сервер, через который ноутбук ходит в интернет.';
-    hint += ' Если на этом компьютере интернет только через прокси, укажите его адрес в переменной окружения HTTPS_PROXY перед запуском (см. README, раздел «Корпоративный прокси»).';
+    if (code === 'SELF_SIGNED_CERT_IN_CHAIN' || code === 'DEPTH_ZERO_SELF_SIGNED_CERT' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || code === 'CERT_HAS_EXPIRED') {
+      hint += ' Похоже, корпоративная защита (антивирус/фаервол) подменяет сертификаты сайтов своим — браузер ему доверяет, а Node.js по умолчанию нет.'
+        + ' Нужно указать этот корпоративный сертификат в переменной окружения NODE_EXTRA_CA_CERTS (см. README, раздел «Корпоративный прокси / сертификат»).';
+    } else if (code === 'ENOTFOUND') {
+      hint += ' Проверьте правильность адреса сайта Jira (например detmir.atlassian.net).';
+    } else if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
+      hint += ' Похоже, соединение блокируется — часто это корпоративный прокси. Укажите его адрес в переменной окружения HTTPS_PROXY (см. README).';
+    } else {
+      hint += ' Часто причина — корпоративный прокси-сервер или подмена сертификатов защитным ПО компании. Подробности — в README, раздел «Корпоративный прокси».';
+    }
     return hint;
   }
   return 'Внутренняя ошибка: ' + e.message;
