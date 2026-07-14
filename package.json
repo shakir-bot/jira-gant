@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "description": "Локальное веб-приложение: диаграмма Ганта с авторизацией в Jira Cloud",
   "main": "server.js",
+  "bin": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "pkg ."
   },
   "dependencies": {
     "express": "^4.19.2",
@@ -13,5 +15,13 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.21.0"
+  },
+  "pkg": {
+    "assets": ["public/**/*"],
+    "targets": ["node22-macos-x64", "node22-macos-arm64", "node22-win-x64"],
+    "outputPath": "dist"
   }
 }

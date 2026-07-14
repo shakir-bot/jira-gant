@@ -1,0 +1,40 @@
+name: Build portable executables
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx pkg . --targets node22-macos-x64 --output dist/gantt-jira-mac-x64
+      - run: npx pkg . --targets node22-macos-arm64 --output dist/gantt-jira-mac-arm64
+      - run: chmod +x dist/gantt-jira-mac-x64 dist/gantt-jira-mac-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gantt-jira-mac
+          path: |
+            dist/gantt-jira-mac-x64
+            dist/gantt-jira-mac-arm64
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx pkg . --targets node22-win-x64 --output dist/gantt-jira-win-x64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gantt-jira-win
+          path: dist/gantt-jira-win-x64.exe
