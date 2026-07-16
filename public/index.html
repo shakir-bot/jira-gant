@@ -322,6 +322,7 @@
       <div class="filter-dropdown-body">
         <div class="filter-check" onclick="setGroupBy('system')"><label>По системе (EWM/ERP/TEST/ABAP...)</label></div>
         <div class="filter-check" onclick="setGroupBy('rank')"><label>По приоритету</label></div>
+        <div class="filter-check" onclick="setGroupBy('stage')"><label>По этапам</label></div>
       </div>
     </div>
   </div>
@@ -344,7 +345,13 @@
 
 <div class="milestones-bar" id="milestonesBar">
   <button class="milestone-btn" onclick="openMilestoneModal()">📍 + Веха</button>
-  <button class="milestone-btn" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff" onclick="openAddTaskModal()">➕ Новая задача</button>
+  <div class="filter-group" style="display:inline-block">
+    <button class="milestone-btn" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff;padding:6px 12px" onclick="toggleAddMenu(event)" title="Добавить задачу или этап" id="addPlusBtn">➕</button>
+    <div class="filter-dropdown" id="addMenuDropdown" style="display:none;min-width:180px">
+      <div class="filter-check" onclick="hideAddMenu();openAddTaskModal()"><label style="cursor:pointer">📄 Новая задача</label></div>
+      <div class="filter-check" onclick="hideAddMenu();openAddStageModal()"><label style="cursor:pointer">📦 Новый этап</label></div>
+    </div>
+  </div>
   <span id="milestoneChips"></span>
 </div>
 
@@ -447,6 +454,18 @@
 <div class="modal-overlay" id="loadingOverlay">
   <div class="modal-box" style="text-align:center">
     <h3 id="loadingText">⏳ Загрузка задач из Jira…</h3>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addStageModal">
+  <div class="modal-box">
+    <h3>📦 Новый этап</h3>
+    <label>Название этапа</label>
+    <input type="text" id="stg-name" placeholder="Например: Фаза 1 — Аналитика" onkeydown="if(event.key==='Enter')submitAddStage();">
+    <div class="modal-actions">
+      <button class="reset-btn" onclick="closeAddStageModal()">Отмена</button>
+      <button class="milestone-btn" style="border-color:#93c5fd;color:#1d4ed8;background:#eff6ff" onclick="submitAddStage()">Создать</button>
+    </div>
   </div>
 </div>
 
@@ -585,6 +604,8 @@ function loadState(){
       if(data.groupBy)groupBy=data.groupBy;
       if(data.manualOrder)manualOrder=data.manualOrder;
       if(data.zoomLevel)zoomLevel=data.zoomLevel;
+      if(data.stages)stages=data.stages;
+      if(typeof data.nextStageId==='number')nextStageId=data.nextStageId;
     }
   }catch(e){
     storageAvailable=false;
@@ -595,7 +616,7 @@ function loadState(){
 function saveState(){
   if(!storageAvailable)return;
   try{
-    localStorage.setItem(STORAGE_KEY,JSON.stringify({tasks,backlog,links,milestones,groupBy,manualOrder,zoomLevel}));
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({tasks,backlog,links,milestones,groupBy,manualOrder,zoomLevel,stages,nextStageId}));
     flashSaved();
   }catch(e){
     storageAvailable=false;
@@ -953,7 +974,8 @@ function toggleAll(cat){
 
 function setGroupBy(mode){
   groupBy=mode;
-  document.getElementById('groupByText').textContent=(mode==='system')?'По системе':'По приоритету';
+  const labels={system:'По системе',rank:'По приоритету',stage:'По этапам'};
+  document.getElementById('groupByText').textContent=labels[mode]||mode;
   document.getElementById('dd-groupby').classList.remove('open');
   buildGantt();
   saveState();
@@ -1100,6 +1122,47 @@ function handleScheduleDrop(e){
 }
 
 // --- Add a brand-new task manually ---
+// --- Кнопка "+" — меню выбора: новая задача или новый этап ---
+function toggleAddMenu(e){
+  e.stopPropagation();
+  const dd=document.getElementById('addMenuDropdown');
+  dd.style.display=(dd.style.display==='none'||!dd.style.display)?'flex':'none';
+}
+function hideAddMenu(){
+  document.getElementById('addMenuDropdown').style.display='none';
+}
+document.addEventListener('click',(e)=>{
+  if(!e.target.closest('#addPlusBtn')&&!e.target.closest('#addMenuDropdown'))hideAddMenu();
+});
+
+// --- Этапы: простая группа с единственным полем — названием ---
+let stages=[]; // {id, name}
+let nextStageId=1;
+function openAddStageModal(){
+  document.getElementById('stg-name').value='';
+  document.getElementById('addStageModal').style.display='flex';
+  document.getElementById('stg-name').focus();
+}
+function closeAddStageModal(){
+  document.getElementById('addStageModal').style.display='none';
+}
+function submitAddStage(){
+  const name=document.getElementById('stg-name').value.trim();
+  if(!name){showToast('Укажите название этапа.','error');return;}
+  stages.push({id:'stage'+(nextStageId++),name});
+  closeAddStageModal();
+  buildGantt();
+  saveState();
+  showToast('Этап «'+name+'» создан. Назначьте в него задачи через правый клик по задаче → «Назначить этап».','success');
+}
+function assignStage(key,stageId){
+  const t=findAnyTask(key);
+  if(!t)return;
+  t.stageId=stageId||null;
+  buildGantt();
+  saveState();
+}
+
 function openAddTaskModal(){
   document.getElementById('addTaskModal').style.display='flex';
   document.getElementById('at-key').value='';
@@ -1384,7 +1447,8 @@ function handleLinkClick(e,key){
     updateLinkModeUI();
   } else {
     if(!links.some(l=>l.from===linkSource&&l.to===key)){
-      links.push({from:linkSource,to:key});
+      const succ=taskMap[key];
+      links.push({from:linkSource,to:key,prevS:succ?succ.s:null,prevE:succ?succ.e:null});
       cascadeFromTask(linkSource);
     }
     linkSource=null;
@@ -1424,6 +1488,19 @@ function showRowContextMenu(e,key,isBacklog){
     const div=document.createElement('div');
     div.className='context-menu-sep';
     menu.appendChild(div);
+  }
+  if(!isBacklog&&stages.length>0){
+    const sepStage=document.createElement('div');
+    sepStage.className='context-menu-sep';
+    menu.appendChild(sepStage);
+    const curName=t.stageId?((stages.find(s=>s.id===t.stageId)||{}).name||''):'';
+    stages.forEach(s=>{
+      const mark=(t.stageId===s.id)?'✓ ':'📦 ';
+      addMenuItem(menu,mark+'Этап: '+s.name,()=>assignStage(key,s.id));
+    });
+    if(t.stageId){
+      addMenuItem(menu,'✕ Убрать из этапа ('+curName+')',()=>assignStage(key,null));
+    }
   }
   if(!t.custom){
     addMenuItem(menu,'🔵 Открыть в Jira',()=>window.open(BASE+key,'_blank'));
@@ -1668,9 +1745,14 @@ function drawLinks(){
     path.setAttribute('marker-end','url(#arrowhead)');
     path.style.pointerEvents='auto';
     path.addEventListener('click',()=>{
-      if(confirm('Удалить связь '+link.from+' → '+link.to+'?')){
+      if(confirm('Удалить связь '+link.from+' → '+link.to+'? Дата начала задачи «'+link.to+'» вернётся к исходной.')){
+        const succ=taskMap[link.to];
+        if(succ&&link.prevS&&link.prevE){
+          succ.s=link.prevS;
+          succ.e=link.prevE;
+        }
         links.splice(idx,1);
-        drawLinks();
+        buildGantt();
         saveState();
       }
     });
@@ -1735,7 +1817,7 @@ function buildGantt(){
 
   const groups=new Map();
   filtered.forEach(t=>{
-    const gk=(groupBy==='system')?systemOf(t.key):rankKey(t.rank);
+    const gk=(groupBy==='system')?systemOf(t.key):(groupBy==='stage')?(t.stageId||'none'):rankKey(t.rank);
     if(!groups.has(gk))groups.set(gk,[]);
     groups.get(gk).push(t);
   });
@@ -1745,6 +1827,12 @@ function buildGantt(){
     sortedGroups=[...groups.keys()].sort((a,b)=>{
       const ia=SYSTEM_ORDER.indexOf(a), ib=SYSTEM_ORDER.indexOf(b);
       return (ia<0?99:ia)-(ib<0?99:ib);
+    });
+  } else if(groupBy==='stage'){
+    const stageOrderIdx=stages.map(s=>s.id);
+    sortedGroups=[...groups.keys()].sort((a,b)=>{
+      if(a==='none')return 1;if(b==='none')return -1;
+      return stageOrderIdx.indexOf(a)-stageOrderIdx.indexOf(b);
     });
   } else {
     sortedGroups=[...groups.keys()].sort((a,b)=>{
@@ -1788,6 +1876,9 @@ function buildGantt(){
     if(groupBy==='system'){
       titleClass=sysCssClass(gk);
       titleText=gk;
+    } else if(groupBy==='stage'){
+      titleClass='rank-3';
+      titleText=(gk==='none')?'Без этапа':((stages.find(s=>s.id===gk)||{}).name||'Этап удалён');
     } else {
       const rkNum=gk==='none'?null:parseFloat(gk);
       titleClass=rankCssClass(rkNum);
@@ -2263,7 +2354,16 @@ async function selectFilter(id,name){
     tasks=data.tasks;
     backlog=data.backlog;
     STORAGE_KEY='gantt_local_overlay_filter_'+id;
-    loadState(); // подмешиваем локальные правки (даты, связи, вехи), сохранённые ранее для этого фильтра
+    // Сбрасываем локальные правки предыдущего фильтра — у каждого проекта
+    // должны быть свои вехи/связи/порядок, а не унаследованные от прошлого
+    links=[];
+    milestones=[];
+    manualOrder={};
+    groupBy='system';
+    zoomLevel='month';
+    stages=[];
+    nextStageId=1;
+    loadState(); // подмешиваем локальные правки (даты, связи, вехи, этапы), сохранённые ранее именно для этого фильтра
     tasks.forEach(t=>{ensureTeamMember(t.assignee);if(t.abapChild)ensureTeamMember(t.abapChild.assignee);});
     backlog.forEach(b=>{ensureTeamMember(b.assignee);if(b.abapChild)ensureTeamMember(b.abapChild.assignee);});
     applyAutoScheduling();

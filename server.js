@@ -153,13 +153,57 @@ async function jiraFetch(req, apiPath, options = {}) {
 }
 
 // ---- Понятное сообщение вместо технического "fetch failed" ----
-function friendlyNetworkError(e) {
+const tls = require('tls');
+
+// Подключается напрямую (без проверки сертификата) и выясняет, какую цепочку
+// сертификатов реально видит сам Node.js — это может отличаться от того, что
+// показывает браузер, если защитное ПО перехватывает трафik разных программ
+// по-разному.
+function dumpCertChain(hostname, port) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (val) => { if (!done) { done = true; resolve(val); } };
+    try {
+      const socket = tls.connect({ host: hostname, port: port || 443, servername: hostname, rejectUnauthorized: false }, () => {
+        const chain = [];
+        let cert = socket.getPeerCertificate(true);
+        const seen = new Set();
+        while (cert && cert.subject && !seen.has(cert.fingerprint)) {
+          seen.add(cert.fingerprint);
+          chain.push({
+            subject: (cert.subject && (cert.subject.CN || cert.subject.O)) || '?',
+            issuer: (cert.issuer && (cert.issuer.CN || cert.issuer.O)) || '?'
+          });
+          cert = (cert.issuerCertificate && cert.issuerCertificate.fingerprint !== cert.fingerprint) ? cert.issuerCertificate : null;
+        }
+        socket.end();
+        finish(chain);
+      });
+      socket.on('error', () => finish(null));
+      socket.setTimeout(4000, () => { socket.destroy(); finish(null); });
+    } catch (e) {
+      finish(null);
+    }
+  });
+}
+
+async function friendlyNetworkError(e, hostname) {
   const code = e && e.cause && e.cause.code;
   if (e.message === 'fetch failed' || code) {
     let hint = 'Не удалось подключиться к Jira по сети.';
-    if (code === 'SELF_SIGNED_CERT_IN_CHAIN' || code === 'DEPTH_ZERO_SELF_SIGNED_CERT' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || code === 'CERT_HAS_EXPIRED') {
-      hint += ' Похоже, корпоративная защита (антивирус/фаервол) подменяет сертификаты сайтов своим — браузер ему доверяет, а Node.js по умолчанию нет.'
-        + ' Нужно указать этот корпоративный сертификат в переменной окружения NODE_EXTRA_CA_CERTS (см. README, раздел «Корпоративный прокси / сертификат»).';
+    const certCodes = ['SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'CERT_HAS_EXPIRED'];
+    if (certCodes.includes(code)) {
+      hint += ' Похоже, корпоративная защита (антивирус/фаервол) подменяет сертификаты сайтов своим — браузер ему доверяет, а Node.js по умолчанию нет.';
+      if (hostname) {
+        const chain = await dumpCertChain(hostname);
+        if (chain && chain.length) {
+          const top = chain[chain.length - 1];
+          hint += ' Реальная цепочка сертификатов, которую видит само приложение: '
+            + chain.map(c => c.subject).join(' → ') + '.'
+            + ' Скорее всего, вам нужен корневой сертификат «' + top.subject + '» (обычно его можно найти в Windows: certmgr.msc → Доверенные корневые центры сертификации → экспортировать этот же сертификат по имени).';
+        }
+      }
+      hint += ' Укажите нужный сертификат в переменной окружения NODE_EXTRA_CA_CERTS (см. README, раздел «Корпоративный прокси / сертификат»).';
     } else if (code === 'ENOTFOUND') {
       hint += ' Проверьте правильность адреса сайта Jira (например detmir.atlassian.net).';
     } else if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
@@ -204,7 +248,7 @@ app.post('/api/login', async (req, res) => {
     res.json({ ok: true, user: req.session.user, site: normalizedSite });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: friendlyNetworkError(e) });
+    res.status(500).json({ error: await friendlyNetworkError(e, (function(){try{return new URL(normalizedSite).hostname;}catch(_){return null;}})()) });
   }
 });
 
@@ -260,7 +304,7 @@ app.get('/api/filters', async (req, res) => {
     }
     res.json({ filters: results });
   } catch (e) {
-    res.status(e.status || 500).json({ error: friendlyNetworkError(e) });
+    res.status(e.status || 500).json({ error: await friendlyNetworkError(e, (function(){try{return new URL(req.session.jira.site).hostname;}catch(_){return null;}})()) });
   }
 });
 
@@ -380,7 +424,7 @@ app.get('/api/users', async (req, res) => {
     const list = await r.json();
     res.json({ users: list.map(u => ({ accountId: u.accountId, displayName: u.displayName })) });
   } catch (e) {
-    res.status(e.status || 500).json({ error: friendlyNetworkError(e) });
+    res.status(e.status || 500).json({ error: await friendlyNetworkError(e, (function(){try{return new URL(req.session.jira.site).hostname;}catch(_){return null;}})()) });
   }
 });
 
@@ -398,7 +442,7 @@ app.patch('/api/issues/:key/assignee', async (req, res) => {
     }
     res.json({ ok: true });
   } catch (e) {
-    res.status(e.status || 500).json({ error: friendlyNetworkError(e) });
+    res.status(e.status || 500).json({ error: await friendlyNetworkError(e, (function(){try{return new URL(req.session.jira.site).hostname;}catch(_){return null;}})()) });
   }
 });
 
@@ -424,7 +468,7 @@ app.patch('/api/issues/:key/status', async (req, res) => {
     }
     res.json({ ok: true });
   } catch (e) {
-    res.status(e.status || 500).json({ error: friendlyNetworkError(e) });
+    res.status(e.status || 500).json({ error: await friendlyNetworkError(e, (function(){try{return new URL(req.session.jira.site).hostname;}catch(_){return null;}})()) });
   }
 });
 
