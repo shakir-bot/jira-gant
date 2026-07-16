@@ -52,6 +52,11 @@
   .milestone-btn:hover{border-color:#7c3aed;background:#ede9fe}
   .milestones-bar{padding:0 28px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .milestone-chip{display:inline-flex;align-items:center;gap:6px;background:#f5f3ff;border:1px solid #ddd6fe;color:#6d28d9;font-size:11px;padding:3px 8px 3px 10px;border-radius:12px;font-weight:600}
+  .stage-chip{display:inline-flex;align-items:center;gap:6px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:11px;padding:3px 8px 3px 10px;border-radius:12px;font-weight:600;margin-right:6px}
+  .stage-chip .edit{cursor:pointer;color:#93c5fd}
+  .stage-chip .edit:hover{color:#1d4ed8}
+  .stage-chip .del{cursor:pointer;color:#93c5fd;font-weight:700}
+  .stage-chip .del:hover{color:#dc2626}
   .milestone-chip .mx{cursor:pointer;color:#a78bfa;font-weight:700}
   .milestone-chip .mx:hover{color:#dc2626}
   .instructions{padding:2px 28px 10px;font-size:12px;color:#94a3b8;transition:color .2s}
@@ -353,6 +358,11 @@
     </div>
   </div>
   <span id="milestoneChips"></span>
+</div>
+
+<div class="milestones-bar" id="stagesBar" style="display:none">
+  <span style="font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-right:2px">Этапы:</span>
+  <span id="stageChips"></span>
 </div>
 
 <div class="instructions" id="instructionsBar">⠿ — перетащите мышкой вверх/вниз, чтобы изменить порядок · перетащите сам бар — сдвинуть даты · ⇔ края бара — изменить длительность · клик правой кнопкой мыши на задаче — связи, удаление и другие действия · клик по линии связи — удалить её</div>
@@ -1161,6 +1171,53 @@ function assignStage(key,stageId){
   t.stageId=stageId||null;
   buildGantt();
   saveState();
+}
+function stageTaskCount(stageId){
+  return tasks.filter(t=>t.stageId===stageId).length+backlog.filter(b=>b.stageId===stageId).length;
+}
+function renameStage(id){
+  const s=stages.find(x=>x.id===id);
+  if(!s)return;
+  const newName=prompt('Новое название этапа:',s.name);
+  if(newName===null)return;
+  const trimmed=newName.trim();
+  if(!trimmed){showToast('Название не может быть пустым.','error');return;}
+  s.name=trimmed;
+  buildGantt();
+  saveState();
+}
+function deleteStage(id){
+  const s=stages.find(x=>x.id===id);
+  if(!s)return;
+  const count=stageTaskCount(id);
+  const msg=count>0
+    ? 'Удалить этап «'+s.name+'»? '+count+' задач(и) будут откреплены от этапа (сами задачи не удалятся).'
+    : 'Удалить этап «'+s.name+'»?';
+  if(!confirm(msg))return;
+  tasks.forEach(t=>{if(t.stageId===id)t.stageId=null;});
+  backlog.forEach(b=>{if(b.stageId===id)b.stageId=null;});
+  stages=stages.filter(x=>x.id!==id);
+  buildGantt();
+  saveState();
+}
+function renderStageChips(){
+  const bar=document.getElementById('stagesBar');
+  const el=document.getElementById('stageChips');
+  if(stages.length===0){
+    bar.style.display='none';
+    return;
+  }
+  bar.style.display='flex';
+  el.innerHTML='';
+  stages.forEach(s=>{
+    const n=stageTaskCount(s.id);
+    const chip=document.createElement('span');
+    chip.className='stage-chip';
+    chip.innerHTML='📦 '+s.name+' ('+n+') '+
+      '<span class="edit" onclick="renameStage(\''+s.id+'\')" title="Переименовать">✎</span>'+
+      '<span class="del" onclick="deleteStage(\''+s.id+'\')" title="Удалить этап">✕</span>';
+    el.appendChild(chip);
+  });
 }
 
 function openAddTaskModal(){
@@ -2061,6 +2118,7 @@ function buildGantt(){
 
   updateLinkModeUI();
   renderMilestoneChips();
+  renderStageChips();
   drawLinks();
   drawMilestones();
   if(viewMode==='calendar')renderCalendar();
