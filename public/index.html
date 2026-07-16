@@ -120,6 +120,7 @@
   .modal-box h3{font-size:16px;margin-bottom:16px;color:#0f172a}
   .modal-box label{display:block;font-size:12px;font-weight:600;color:#475569;margin:10px 0 4px}
   .modal-box label .hint{font-weight:400;color:#94a3b8;font-size:11px}
+  .hint{font-weight:400;color:#94a3b8;font-size:11px}
   .modal-box input[type="text"],.modal-box input[type="date"],.modal-box input[type="number"],.modal-box select{width:100%;padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:inherit}
   .modal-row{display:flex;gap:12px}
   .modal-row>div{flex:1}
@@ -143,6 +144,11 @@
   .month-col{flex:1;border-right:1px solid #f1f5f9}
   .month-col:last-child{border-right:none}
   .bar{position:absolute;height:18px;top:4px;border-radius:4px;min-width:6px;transition:opacity .2s;cursor:grab;touch-action:none}
+  tr.stage-summary-row td{background:#f8fafc;font-size:11px;color:#475569;font-weight:600;font-style:italic}
+  tr.stage-summary-row:hover td{background:#f1f5f9}
+  .stage-bar{position:absolute;height:12px;top:7px;border-radius:6px;min-width:10px;cursor:grab;touch-action:none;background:repeating-linear-gradient(135deg,#334155,#334155 6px,#475569 6px,#475569 12px);box-shadow:0 0 0 1px #1e293b inset}
+  .stage-bar:hover{opacity:.85}
+  .stage-bar:active{cursor:grabbing}
   .bar:active{cursor:grabbing}
   .bar:hover{opacity:.9;filter:brightness(1.05)}
   .bar.overdue{background-image:repeating-linear-gradient(135deg,transparent,transparent 3px,rgba(255,255,255,.3) 3px,rgba(255,255,255,.3) 6px);outline:2px solid #dc2626;outline-offset:-1px}
@@ -251,7 +257,13 @@
     <h1 id="headerTitle">📊 Диаграмма Ганта Jira</h1>
     <div id="userBadge" style="display:none;align-items:center;gap:10px;font-size:13px;color:#475569">
       <span id="userName"></span>
-      <button class="reset-btn" onclick="refreshFromJira()" title="Перезагрузить свежие данные из Jira (локальные правки для этого фильтра будут очищены)">🔄 Обновить из Jira</button>
+      <div class="filter-group" style="display:inline-block">
+        <button class="reset-btn" onclick="toggleRefreshMenu(event)" title="Обновить данные из Jira">🔄 Обновить из Jira ▾</button>
+        <div class="filter-dropdown" id="refreshMenuDropdown" style="display:none;min-width:280px;right:0;left:auto">
+          <div class="filter-check" style="white-space:normal" onclick="hideRefreshMenu();refreshAllFromJira()"><label style="cursor:pointer;white-space:normal">🔄 Обновить всё по фильтру <span class="hint">(полная перезагрузка — локальные правки для этого фильтра будут потеряны)</span></label></div>
+          <div class="filter-check" style="white-space:normal" onclick="hideRefreshMenu();refreshCurrentTasksOnly()"><label style="cursor:pointer;white-space:normal">🔃 Обновить только текущие задачи <span class="hint">(статус/исполнитель/оценка — без потери дат, связей, вех и порядка)</span></label></div>
+        </div>
+      </div>
       <button class="reset-btn" onclick="switchFilter()">🔀 Сменить фильтр</button>
       <button class="reset-btn" onclick="doLogout()">Выйти</button>
     </div>
@@ -1751,6 +1763,82 @@ function renderBarPosition(key){
   drawMilestones();
 }
 
+// --- Перетаскивание этапа целиком: сдвигает даты всех входящих в него задач ---
+function getStageBounds(stageId){
+  const children=tasks.filter(t=>t.stageId===stageId);
+  if(children.length===0)return null;
+  let minS=null,maxE=null;
+  children.forEach(t=>{
+    const s=new Date(t.s+'T00:00:00'), e=new Date(t.e+'T00:00:00');
+    if(!minS||s<minS)minS=s;
+    if(!maxE||e>maxE)maxE=e;
+  });
+  return {start:minS,end:maxE,children};
+}
+let stageDragState=null;
+function startStageMove(e,stageId){
+  if(e.pointerType==='mouse' && e.button!==0)return;
+  e.preventDefault();
+  e.stopPropagation();
+  const el=e.currentTarget;
+  const cell=el.closest('.chart-cell')||el.parentElement;
+  const rect=cell.getBoundingClientRect();
+  const bounds=getStageBounds(stageId);
+  if(!bounds)return;
+  const origDates={};
+  bounds.children.forEach(t=>{origDates[t.key]={s:new Date(t.s+'T00:00:00'),e:new Date(t.e+'T00:00:00')};});
+  stageDragState={stageId,startX:e.clientX,cellWidth:rect.width,origDates,origBoundsStart:bounds.start,origBoundsEnd:bounds.end,moved:false,el,pointerId:e.pointerId};
+  try{el.setPointerCapture(e.pointerId);}catch(err){}
+  el.addEventListener('pointermove',onStageDragMove);
+  el.addEventListener('pointerup',onStageDragEnd);
+  el.addEventListener('pointercancel',onStageDragEnd);
+}
+function renderStageBarPosition(stageId){
+  const bounds=getStageBounds(stageId);
+  if(!bounds)return;
+  document.querySelectorAll('.stage-bar[data-stage="'+stageId+'"]').forEach(bar=>{
+    const leftPct=dayPos(bounds.start),rightPct=dayPos(bounds.end);
+    const widthPct=Math.max(rightPct-leftPct,0.8);
+    bar.style.left=leftPct+'%';
+    bar.style.width=widthPct+'%';
+  });
+}
+function onStageDragMove(e){
+  if(!stageDragState)return;
+  const dx=e.clientX-stageDragState.startX;
+  if(Math.abs(dx)>3)stageDragState.moved=true;
+  let deltaMs=(dx/stageDragState.cellWidth)*(TL_END-TL_START);
+  const newBoundsStart=new Date(stageDragState.origBoundsStart.getTime()+deltaMs);
+  const newBoundsEnd=new Date(stageDragState.origBoundsEnd.getTime()+deltaMs);
+  if(newBoundsStart<TL_START)deltaMs+=(TL_START-newBoundsStart);
+  if(newBoundsEnd>TL_END)deltaMs-=(newBoundsEnd-TL_END);
+  Object.keys(stageDragState.origDates).forEach(key=>{
+    const t=taskMap[key];
+    if(!t)return;
+    const od=stageDragState.origDates[key];
+    t.s=toISO(new Date(od.s.getTime()+deltaMs));
+    t.e=toISO(new Date(od.e.getTime()+deltaMs));
+    renderBarPosition(key);
+  });
+  renderStageBarPosition(stageDragState.stageId);
+}
+function onStageDragEnd(e){
+  if(!stageDragState)return;
+  const el=stageDragState.el;
+  el.removeEventListener('pointermove',onStageDragMove);
+  el.removeEventListener('pointerup',onStageDragEnd);
+  el.removeEventListener('pointercancel',onStageDragEnd);
+  try{el.releasePointerCapture(stageDragState.pointerId);}catch(err){}
+  if(stageDragState.moved){
+    window.__ganttSuppressClick=true;
+    setTimeout(()=>{window.__ganttSuppressClick=false;},0);
+    Object.keys(stageDragState.origDates).forEach(key=>cascadeFromTask(key));
+    buildGantt();
+    saveState();
+  }
+  stageDragState=null;
+}
+
 // --- Links overlay drawing ---
 function drawLinks(){
   const container=document.getElementById('ganttRightContainer');
@@ -1983,6 +2071,33 @@ function buildGantt(){
     rcol.style.width=chartColWidth+'px';
     rightColgroup.appendChild(rcol);
     rightTable.appendChild(rightColgroup);
+
+    if(groupBy==='stage'&&gk!=='none'){
+      const bounds=getStageBounds(gk);
+      if(bounds){
+        const stgLeftPct=dayPos(bounds.start);
+        const stgRightPct=dayPos(bounds.end);
+        const stgWidthPct=Math.max(stgRightPct-stgLeftPct,0.8);
+        const lstg=document.createElement('tr');
+        lstg.className='stage-summary-row';
+        lstg.innerHTML=
+          '<td class="col-order"><span class="drag-handle" onpointerdown="startStageMove(event,\''+gk+'\')" title="Перетащите, чтобы сдвинуть все задачи этапа целиком">⠿</span></td>'+
+          '<td class="col-key" colspan="5">📦 Весь этап «'+titleText+'» ('+bounds.children.length+' задач) — перетащите ⠿ слева, чтобы сдвинуть все даты сразу</td>';
+        leftTable.appendChild(lstg);
+
+        const rstg=document.createElement('tr');
+        rstg.className='stage-summary-row';
+        rstg.innerHTML=
+          '<td class="col-chart">'+
+            '<div class="chart-cell">'+
+              '<div class="month-grid">'+gridColsHtml+'</div>'+
+              '<div class="stage-bar" data-stage="'+gk+'" style="left:'+stgLeftPct+'%;width:'+stgWidthPct+'%" onpointerdown="startStageMove(event,\''+gk+'\')" title="Этап «'+titleText+'»: '+fmtDate(toISO(bounds.start))+' → '+fmtDate(toISO(bounds.end))+'"></div>'+
+              '<div class="today-line" style="left:'+dayPos(TODAY)+'%"></div>'+
+            '</div>'+
+          '</td>';
+        rightTable.appendChild(rstg);
+      }
+    }
 
     items.forEach((t)=>{
       const endD=new Date(t.e+'T00:00:00');
@@ -2442,11 +2557,56 @@ async function selectFilter(id,name){
   }
 }
 
-function refreshFromJira(){
+function toggleRefreshMenu(e){
+  e.stopPropagation();
+  const dd=document.getElementById('refreshMenuDropdown');
+  dd.style.display=(dd.style.display==='none'||!dd.style.display)?'flex':'none';
+}
+function hideRefreshMenu(){
+  document.getElementById('refreshMenuDropdown').style.display='none';
+}
+document.addEventListener('click',(e)=>{
+  if(!e.target.closest('#refreshMenuDropdown')&&!e.target.closest('button[onclick^="toggleRefreshMenu"]'))hideRefreshMenu();
+});
+
+function refreshAllFromJira(){
   if(!currentFilter)return;
-  if(!confirm('Перезагрузить свежие данные из Jira? Локальные правки (даты, связи, вехи, вручную добавленные задачи) для этого фильтра будут потеряны.'))return;
+  if(!confirm('Перезагрузить свежие данные из Jira? Локальные правки (даты, связи, вехи, этапы, вручную добавленные задачи) для этого фильтра будут потеряны.'))return;
   try{localStorage.removeItem(STORAGE_KEY);}catch(e){}
   selectFilter(currentFilter.id,currentFilter.name);
+}
+
+// Обновляет только уже присутствующие в приложении задачи (по ключу):
+// статус, исполнитель, оценка/затрачено/остаток, признак частых переносов,
+// связанную ABAP-задачу. Даты, связи, вехи, этапы, порядок и вручную
+// созданные/удалённые задачи не трогает — только "подтягивает" изменения
+// из Jira по тем задачам, что уже на диаграмме или в бэклоге.
+async function refreshCurrentTasksOnly(){
+  if(!currentFilter)return;
+  const knownKeys=new Set([...tasks.filter(t=>!t.custom).map(t=>t.key),...backlog.filter(b=>!b.custom).map(b=>b.key)]);
+  if(knownKeys.size===0){showToast('Нет задач для обновления.','info');return;}
+  showToast('Обновляю данные по '+knownKeys.size+' задачам из Jira…','info');
+  try{
+    const r=await fetch('/api/issues?filterId='+encodeURIComponent(currentFilter.id));
+    const data=await r.json();
+    if(!r.ok){showToast('Ошибка обновления: '+(data.error||'неизвестная ошибка'),'error');return;}
+    const freshByKey={};
+    [...data.tasks,...data.backlog].forEach(item=>{freshByKey[item.key]=item;});
+    const FIELDS=['status','assignee','priority','rank','type','labels','est','spent','rem','updated','flagged','abapChild'];
+    let updated=0;
+    [...tasks,...backlog].forEach(item=>{
+      if(item.custom)return;
+      const fresh=freshByKey[item.key];
+      if(!fresh)return;
+      FIELDS.forEach(f=>{item[f]=fresh[f];});
+      updated++;
+    });
+    buildGantt();
+    saveState();
+    showToast('✓ Обновлено задач: '+updated+' (даты/связи/вехи/этапы не затронуты)','success');
+  }catch(e){
+    showToast('Не удалось связаться с сервером: '+e.message,'error');
+  }
 }
 async function checkSession(){
   try{
