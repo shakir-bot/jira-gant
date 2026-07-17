@@ -185,8 +185,10 @@
   #linksSvg path.linkpath{pointer-events:auto;cursor:pointer}
   #linksSvg path.linkpath:hover{stroke:#dc2626 !important;stroke-width:2.5}
   .milestone-line{position:absolute;top:0;width:0;border-left:2px dashed #7c3aed;z-index:4;pointer-events:none}
-  .milestone-marker{position:absolute;top:-9px;width:14px;height:14px;background:#7c3aed;transform:translateX(-50%) rotate(45deg);border-radius:2px;cursor:pointer;z-index:11;box-shadow:0 1px 3px rgba(0,0,0,.3)}
-  .milestone-marker:hover{background:#dc2626}
+  .milestone-flag{position:absolute;top:0;width:16px;height:12px;clip-path:polygon(0 0, 100% 22%, 0 45%);background:#7c3aed;cursor:pointer;z-index:11;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
+  .milestone-label{position:absolute;top:2px;font-size:10px;font-weight:700;white-space:nowrap;cursor:pointer;background:#fff;padding:0 4px;border-radius:3px;line-height:14px;box-shadow:0 1px 2px rgba(0,0,0,.15);z-index:12;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+  .milestone-flag:hover{filter:drop-shadow(0 1px 2px rgba(220,38,38,.6)) brightness(1.15)}
+  .milestone-label:hover{background:#fef2f2}
 
   /* Calendar view */
   .calendar-section{padding:4px 28px 24px}
@@ -343,6 +345,10 @@
       </div>
     </div>
   </div>
+  <div id="stageViewToggle" style="display:none;margin-left:4px;gap:6px;align-items:center">
+    <button class="reset-btn" onclick="collapseAllStages(true)" title="Свернуть все этапы — видны только сводные бары (макро-вид)">📐 Макро-вид</button>
+    <button class="reset-btn" onclick="collapseAllStages(false)" title="Развернуть все этапы — видны все задачи">📋 Обычный вид</button>
+  </div>
   <div class="filter-group" id="fg-zoom" style="margin-left:8px">
     <div class="filter-label">Масштаб</div>
     <button class="filter-btn" onclick="toggleDropdown('zoom')">
@@ -432,7 +438,7 @@
   <div class="legend-item"><div class="legend-swatch" style="background:#94a3b8"></div>Новый</div>
   <div class="legend-item" style="margin-left:12px"><div style="width:14px;height:10px;border-radius:3px;background:repeating-linear-gradient(135deg,#ef4444,#ef4444 3px,rgba(255,255,255,.3) 3px,rgba(255,255,255,.3) 6px);outline:1.5px solid #dc2626;outline-offset:-1px"></div>Просрочено</div>
   <div class="legend-item"><span style="color:#dc2626;font-size:13px">│</span> Сегодня</div>
-  <div class="legend-item"><span style="color:#7c3aed;font-size:13px">◆</span> Веха</div>
+  <div class="legend-item"><span style="color:#7c3aed;font-size:13px">🚩</span> Веха</div>
   <div class="legend-item"><span style="color:#dc2626;font-size:12px">⚑</span> Частые переносы (≥3)</div>
 </div>
 
@@ -1198,6 +1204,18 @@ function renameStage(id){
   buildGantt();
   saveState();
 }
+function toggleStageCollapse(id){
+  const s=stages.find(x=>x.id===id);
+  if(!s)return;
+  s.collapsed=!s.collapsed;
+  buildGantt();
+  saveState();
+}
+function collapseAllStages(collapsed){
+  stages.forEach(s=>{s.collapsed=collapsed;});
+  buildGantt();
+  saveState();
+}
 function deleteStage(id){
   const s=stages.find(x=>x.id===id);
   if(!s)return;
@@ -1668,7 +1686,7 @@ function renderMilestoneChips(){
     chip.style.background=c.bg;
     chip.style.borderColor=c.border;
     chip.style.color=c.strong;
-    chip.innerHTML='◆ '+m.title+' ('+fmtDate(m.date)+') <span class="mx" onclick="removeMilestone(\''+m.id+'\')">✕</span>';
+    chip.innerHTML='🚩 '+m.title+' ('+fmtDate(m.date)+') <span class="mx" onclick="removeMilestone(\''+m.id+'\')">✕</span>';
     el.appendChild(chip);
   });
 }
@@ -1936,14 +1954,24 @@ function drawMilestones(){
     line.style.height=container.scrollHeight+'px';
     line.style.borderLeftColor=c.strong;
     overlay.appendChild(line);
-    const marker=document.createElement('div');
-    marker.className='milestone-marker';
-    marker.style.left=x+'px';
-    marker.style.background=c.strong;
-    marker.style.pointerEvents='auto';
-    marker.title=m.title+' — '+fmtDate(m.date);
-    marker.onclick=()=>removeMilestone(m.id);
-    overlay.appendChild(marker);
+    const flag=document.createElement('div');
+    flag.className='milestone-flag';
+    flag.style.left=x+'px';
+    flag.style.background=c.strong;
+    flag.style.pointerEvents='auto';
+    flag.title=m.title+' — '+fmtDate(m.date);
+    flag.onclick=()=>removeMilestone(m.id);
+    overlay.appendChild(flag);
+    const label=document.createElement('div');
+    label.className='milestone-label';
+    label.style.left=(x+6)+'px';
+    label.style.color=c.strong;
+    label.style.borderLeft='3px solid '+c.strong;
+    label.textContent=m.title;
+    label.title=m.title+' — '+fmtDate(m.date);
+    label.style.pointerEvents='auto';
+    label.onclick=()=>removeMilestone(m.id);
+    overlay.appendChild(label);
   });
   container.appendChild(overlay);
 }
@@ -1951,6 +1979,9 @@ function drawMilestones(){
 function buildGantt(){
   taskMap={};
   tasks.forEach(t=>taskMap[t.key]=t);
+
+  const stageToggleBar=document.getElementById('stageViewToggle');
+  if(stageToggleBar)stageToggleBar.style.display=(groupBy==='stage')?'flex':'none';
 
   const filtered=tasks.filter(matchFilters);
   buildCards(filtered);
@@ -2034,7 +2065,13 @@ function buildGantt(){
     const leftSection=document.createElement('div');
     const sTitle=document.createElement('div');
     sTitle.className='section-title '+titleClass;
-    sTitle.innerHTML=titleText+' <span class="badge">'+items.length+'</span>';
+    const isStageGroup=(groupBy==='stage'&&gk!=='none');
+    const stageObj=isStageGroup?stages.find(s=>s.id===gk):null;
+    const stageCollapsed=stageObj?!!stageObj.collapsed:false;
+    const stageToggleHtml=isStageGroup?('<span class="collapse-toggle" style="font-size:14px;margin-right:2px" onclick="toggleStageCollapse(\''+gk+'\')" title="'+(stageCollapsed?'Развернуть задачи этапа':'Свернуть задачи этапа (макро-вид)')+'">'+(stageCollapsed?'▸':'▾')+'</span>'):'';
+    sTitle.innerHTML=stageToggleHtml+titleText+' <span class="badge">'+items.length+'</span>';
+    if(isStageGroup)sTitle.style.cursor='pointer';
+    if(isStageGroup)sTitle.onclick=()=>toggleStageCollapse(gk);
     leftSection.appendChild(sTitle);
     const thSpacer=document.createElement('div');
     thSpacer.className='timeline-header-spacer';
@@ -2099,7 +2136,7 @@ function buildGantt(){
       }
     }
 
-    items.forEach((t)=>{
+    if(!stageCollapsed)items.forEach((t)=>{
       const endD=new Date(t.e+'T00:00:00');
       const overdue=endD<TODAY;
       const leftPct=dayPos(t.s+'T00:00:00');
