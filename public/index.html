@@ -387,6 +387,12 @@
   <span id="stageChips"></span>
 </div>
 
+<div class="milestones-bar" id="abapCollapseBar" style="display:none">
+  <span style="font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-right:2px">ABAP-задачи:</span>
+  <button class="reset-btn" onclick="collapseAllAbap(true)" title="Скрыть все связанные ABAP-задачи под родительскими">Свернуть все</button>
+  <button class="reset-btn" onclick="collapseAllAbap(false)" title="Показать все связанные ABAP-задачи">Развернуть все</button>
+</div>
+
 <div class="instructions" id="instructionsBar">⠿ — перетащите мышкой вверх/вниз, чтобы изменить порядок · перетащите сам бар — сдвинуть даты · ⇔ края бара — изменить длительность · клик правой кнопкой мыши на задаче — связи, удаление и другие действия · клик по линии связи — удалить её</div>
 
 <div class="gantt-split" id="ganttWrapper" ondragover="event.preventDefault();document.getElementById('ganttWrapper').classList.add('drag-over-zone')" ondragleave="document.getElementById('ganttWrapper').classList.remove('drag-over-zone')" ondrop="handleScheduleDrop(event)">
@@ -2053,6 +2059,9 @@ function buildGantt(){
   const stageToggleBar=document.getElementById('stageViewToggle');
   if(stageToggleBar)stageToggleBar.style.display=(groupBy==='stage')?'flex':'none';
 
+  const abapBar=document.getElementById('abapCollapseBar');
+  if(abapBar)abapBar.style.display=tasks.some(t=>t.abapChild)?'flex':'none';
+
   const filtered=tasks.filter(matchFilters);
   buildCards(filtered);
 
@@ -2224,8 +2233,7 @@ function buildGantt(){
       const keyHtml=t.custom?('<span class="key-link" style="cursor:default;color:#0f172a" title="Задача создана вручную, не в Jira">'+t.key+' ✎</span>'):('<a class="key-link" href="'+BASE+t.key+'" target="_blank" onclick="event.stopPropagation()">'+t.key+'</a>');
       const forecastBadge=t.forecast?'<span class="forecast-badge" title="Даты рассчитаны автоматически — в Jira для этой задачи нет оценки">прогноз</span>':'';
       const hasAbapSub=!!t.abapChild;
-      const collapseToggle=hasAbapSub?('<span class="collapse-toggle" onclick="event.stopPropagation();toggleAbapCollapse(\''+t.key+'\')" title="'+(t.collapsed?'Показать':'Скрыть')+' связанную ABAP-задачу">'+(t.collapsed?'▸':'▾')+'</span>'):'';
-      const collapsedAbapBadge=(hasAbapSub&&t.collapsed)?('<span class="abap-link-badge" title="'+t.abapChild.sum.replace(/"/g,'&quot;')+'">'+t.abapChild.key+' скрыт</span>'):'';
+      const collapseToggle=hasAbapSub?('<span class="collapse-toggle" onclick="event.stopPropagation();toggleAbapCollapse(\''+t.key+'\')" title="'+(t.collapsed?'Показать':'Скрыть')+' связанную ABAP-задачу '+t.abapChild.key+(t.collapsed?' ('+t.abapChild.sum.replace(/"/g,'&quot;')+')':'')+'">'+(t.collapsed?'▸':'▾')+'</span>'):'';
       const ttData=JSON.stringify({k:t.key,s:fmtDate(t.s),e:fmtDate(t.e),st:t.status,a:t.assignee,p:t.priority,sm:t.sum,r:rankLabel(t.rank),tp:t.type,u:t.updated||'',labels:t.labels||'',est:fmtD(t.est),spent:fmtD(t.spent),rem:fmtD(t.rem),sys:systemOf(t.key)});
 
       const rowClickHandler=()=>{
@@ -2241,7 +2249,7 @@ function buildGantt(){
       ltr.oncontextmenu=(ev)=>showRowContextMenu(ev,t.key,false);
       ltr.innerHTML=
         '<td class="col-order"><span class="drag-handle" onpointerdown="startRowDrag(event,\''+ordKey+'\',\''+t.key+'\')" title="Перетащите мышкой, чтобы изменить порядок">⠿</span></td>'+
-        '<td class="col-key">'+collapseToggle+keyHtml+sysLabel+forecastBadge+collapsedAbapBadge+
+        '<td class="col-key">'+collapseToggle+keyHtml+sysLabel+forecastBadge+
         '</td>'+
         '<td class="col-summary"><span class="summary-text" title="'+t.sum.replace(/"/g,'&quot;')+'">'+t.sum+'</span></td>'+
         '<td class="col-assignee">'+renderAssigneeCell(t.key,t.assignee)+'</td>'+
