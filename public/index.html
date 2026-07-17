@@ -215,6 +215,10 @@
   tr.abap-child-row .col-key{padding-left:20px}
   tr.abap-child-row .col-key::before{content:'↳';color:#94a3b8;margin-right:4px}
   .collapse-toggle{cursor:pointer;color:#94a3b8;font-size:11px;margin-right:4px;user-select:none}
+  .stage-section-drag{cursor:grab;color:#cbd5e1;font-size:13px;margin-right:6px;user-select:none;touch-action:none}
+  .stage-section-drag:hover{color:#3b82f6}
+  .stage-section-drag:active{cursor:grabbing}
+  div.section-drop-target-above{outline:2px solid #3b82f6;outline-offset:-2px;background:#eff6ff}
   .collapse-toggle:hover{color:#3b82f6}
   .cal-controls{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
   .cal-period-btn{padding:5px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;font-size:12px;cursor:pointer;color:#334155;font-weight:600}
@@ -1211,6 +1215,62 @@ function toggleStageCollapse(id){
   buildGantt();
   saveState();
 }
+
+// --- Перетаскивание заголовка этапа вверх/вниз — меняет порядок этапов (иерархию) ---
+let stageSectionDragState=null;
+function startStageSectionDrag(e,stageId){
+  if(e.pointerType==='mouse' && e.button!==0)return;
+  e.preventDefault();
+  e.stopPropagation();
+  const handle=e.currentTarget;
+  stageSectionDragState={stageId,pointerId:e.pointerId,handle,targetStageId:undefined,moved:false};
+  try{handle.setPointerCapture(e.pointerId);}catch(err){}
+  handle.addEventListener('pointermove',onStageSectionDragMove);
+  handle.addEventListener('pointerup',onStageSectionDragEnd);
+  handle.addEventListener('pointercancel',onStageSectionDragEnd);
+}
+function onStageSectionDragMove(e){
+  if(!stageSectionDragState)return;
+  stageSectionDragState.moved=true;
+  const sections=Array.from(document.querySelectorAll('#ganttLeftContainer > div[data-stage-id]'))
+    .filter(d=>d.dataset.stageId!==stageSectionDragState.stageId);
+  sections.forEach(s=>s.classList.remove('section-drop-target-above'));
+  let targetSection=null;
+  for(const s of sections){
+    const rect=s.getBoundingClientRect();
+    const mid=rect.top+rect.height/2;
+    if(e.clientY<mid){targetSection=s;break;}
+  }
+  if(targetSection)targetSection.classList.add('section-drop-target-above');
+  stageSectionDragState.targetStageId=targetSection?targetSection.dataset.stageId:null;
+}
+function onStageSectionDragEnd(e){
+  if(!stageSectionDragState)return;
+  const handle=stageSectionDragState.handle;
+  handle.removeEventListener('pointermove',onStageSectionDragMove);
+  handle.removeEventListener('pointerup',onStageSectionDragEnd);
+  handle.removeEventListener('pointercancel',onStageSectionDragEnd);
+  try{handle.releasePointerCapture(stageSectionDragState.pointerId);}catch(err){}
+  document.querySelectorAll('.section-drop-target-above').forEach(s=>s.classList.remove('section-drop-target-above'));
+  const {stageId,targetStageId,moved}=stageSectionDragState;
+  if(moved&&targetStageId!==undefined){
+    const idx=stages.findIndex(s=>s.id===stageId);
+    if(idx>=0){
+      const moved2=stages.splice(idx,1)[0];
+      if(targetStageId){
+        const newIdx=stages.findIndex(s=>s.id===targetStageId);
+        stages.splice(newIdx>=0?newIdx:stages.length,0,moved2);
+      } else {
+        stages.push(moved2);
+      }
+      window.__ganttSuppressClick=true;
+      setTimeout(()=>{window.__ganttSuppressClick=false;},0);
+      buildGantt();
+      saveState();
+    }
+  }
+  stageSectionDragState=null;
+}
 function collapseAllStages(collapsed){
   stages.forEach(s=>{s.collapsed=collapsed;});
   buildGantt();
@@ -1944,7 +2004,9 @@ function drawMilestones(){
   overlay.style.width='100%';
   overlay.style.height=container.scrollHeight+'px';
   overlay.style.pointerEvents='none';
-  milestones.forEach(m=>{
+  const sortedMs=milestones.slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const laneRightEdge=[];
+  sortedMs.forEach(m=>{
     const c=getMilestoneColor(m.color);
     const pct=dayPos(m.date+'T00:00:00');
     const x=offsetX+(pct/100)*cellWidth;
@@ -1972,6 +2034,14 @@ function drawMilestones(){
     label.style.pointerEvents='auto';
     label.onclick=()=>removeMilestone(m.id);
     overlay.appendChild(label);
+    const labelWidth=label.getBoundingClientRect().width||80;
+    let lane=0;
+    while(laneRightEdge[lane]!==undefined&&x<laneRightEdge[lane]+4){
+      lane++;
+      if(lane>5){lane=0;break;}
+    }
+    laneRightEdge[lane]=x+6+labelWidth;
+    label.style.top=(2+lane*16)+'px';
   });
   container.appendChild(overlay);
 }
@@ -2068,10 +2138,12 @@ function buildGantt(){
     const isStageGroup=(groupBy==='stage'&&gk!=='none');
     const stageObj=isStageGroup?stages.find(s=>s.id===gk):null;
     const stageCollapsed=stageObj?!!stageObj.collapsed:false;
+    const stageDragHandleHtml=isStageGroup?('<span class="stage-section-drag" onpointerdown="startStageSectionDrag(event,\''+gk+'\')" title="Перетащите вверх/вниз, чтобы изменить порядок этапов">⠿⠿</span>'):'';
     const stageToggleHtml=isStageGroup?('<span class="collapse-toggle" style="font-size:14px;margin-right:2px" onclick="toggleStageCollapse(\''+gk+'\')" title="'+(stageCollapsed?'Развернуть задачи этапа':'Свернуть задачи этапа (макро-вид)')+'">'+(stageCollapsed?'▸':'▾')+'</span>'):'';
-    sTitle.innerHTML=stageToggleHtml+titleText+' <span class="badge">'+items.length+'</span>';
+    sTitle.innerHTML=stageDragHandleHtml+stageToggleHtml+titleText+' <span class="badge">'+items.length+'</span>';
     if(isStageGroup)sTitle.style.cursor='pointer';
-    if(isStageGroup)sTitle.onclick=()=>toggleStageCollapse(gk);
+    if(isStageGroup)sTitle.onclick=()=>{if(window.__ganttSuppressClick){window.__ganttSuppressClick=false;return;}toggleStageCollapse(gk);};
+    if(isStageGroup){leftSection.dataset.stageId=gk;}
     leftSection.appendChild(sTitle);
     const thSpacer=document.createElement('div');
     thSpacer.className='timeline-header-spacer';
@@ -2090,6 +2162,7 @@ function buildGantt(){
 
     // RIGHT section: title spacer + real timeline header + chart-only table
     const rightSection=document.createElement('div');
+    if(isStageGroup)rightSection.dataset.stageId=gk;
     const titleSpacer=document.createElement('div');
     titleSpacer.className='section-title-spacer';
     rightSection.appendChild(titleSpacer);
@@ -2150,9 +2223,8 @@ function buildGantt(){
       const sysLabel=(groupBy!=='system')?('<span class="sys-badge '+sysCssClass(systemOf(t.key))+'">'+systemOf(t.key)+'</span>'):'';
       const keyHtml=t.custom?('<span class="key-link" style="cursor:default;color:#0f172a" title="Задача создана вручную, не в Jira">'+t.key+' ✎</span>'):('<a class="key-link" href="'+BASE+t.key+'" target="_blank" onclick="event.stopPropagation()">'+t.key+'</a>');
       const forecastBadge=t.forecast?'<span class="forecast-badge" title="Даты рассчитаны автоматически — в Jira для этой задачи нет оценки">прогноз</span>':'';
-      const hasAbapSub=!!(t.abapChild&&t.abapChild.s&&t.abapChild.e);
+      const hasAbapSub=!!t.abapChild;
       const collapseToggle=hasAbapSub?('<span class="collapse-toggle" onclick="event.stopPropagation();toggleAbapCollapse(\''+t.key+'\')" title="'+(t.collapsed?'Показать':'Скрыть')+' связанную ABAP-задачу">'+(t.collapsed?'▸':'▾')+'</span>'):'';
-      const abapBadge=(t.abapChild&&!hasAbapSub)?('<span class="abap-link-badge" title="Связанная ABAP-задача: '+t.abapChild.key+' — '+t.abapChild.sum.replace(/"/g,'&quot;')+' ('+t.abapChild.status+')">🔗 '+t.abapChild.key+'</span>'):'';
       const collapsedAbapBadge=(hasAbapSub&&t.collapsed)?('<span class="abap-link-badge" title="'+t.abapChild.sum.replace(/"/g,'&quot;')+'">'+t.abapChild.key+' скрыт</span>'):'';
       const ttData=JSON.stringify({k:t.key,s:fmtDate(t.s),e:fmtDate(t.e),st:t.status,a:t.assignee,p:t.priority,sm:t.sum,r:rankLabel(t.rank),tp:t.type,u:t.updated||'',labels:t.labels||'',est:fmtD(t.est),spent:fmtD(t.spent),rem:fmtD(t.rem),sys:systemOf(t.key)});
 
@@ -2169,7 +2241,7 @@ function buildGantt(){
       ltr.oncontextmenu=(ev)=>showRowContextMenu(ev,t.key,false);
       ltr.innerHTML=
         '<td class="col-order"><span class="drag-handle" onpointerdown="startRowDrag(event,\''+ordKey+'\',\''+t.key+'\')" title="Перетащите мышкой, чтобы изменить порядок">⠿</span></td>'+
-        '<td class="col-key">'+collapseToggle+keyHtml+sysLabel+forecastBadge+abapBadge+collapsedAbapBadge+
+        '<td class="col-key">'+collapseToggle+keyHtml+sysLabel+forecastBadge+collapsedAbapBadge+
         '</td>'+
         '<td class="col-summary"><span class="summary-text" title="'+t.sum.replace(/"/g,'&quot;')+'">'+t.sum+'</span></td>'+
         '<td class="col-assignee">'+renderAssigneeCell(t.key,t.assignee)+'</td>'+
@@ -2196,11 +2268,13 @@ function buildGantt(){
 
       if(hasAbapSub&&!t.collapsed){
         const ac=t.abapChild;
-        const acLeftPct=dayPos(ac.s+'T00:00:00');
-        const acRightPct=dayPos(ac.e+'T00:00:00');
+        const acS=ac.s||t.s;
+        const acE=ac.e||t.e;
+        const acLeftPct=dayPos(acS+'T00:00:00');
+        const acRightPct=dayPos(acE+'T00:00:00');
         const acWidthPct=Math.max(acRightPct-acLeftPct,0.8);
         const acStatusShort=ac.status.length>22?ac.status.substring(0,20)+'…':ac.status;
-        const acTtData=JSON.stringify({k:ac.key,s:fmtDate(ac.s),e:fmtDate(ac.e),st:ac.status,a:ac.assignee,p:'',sm:ac.sum,r:'',tp:'ABAP (связанная)',u:'',labels:'',est:fmtD(ac.est),spent:fmtD(ac.spent),rem:fmtD(ac.rem),sys:'ABAP'});
+        const acTtData=JSON.stringify({k:ac.key,s:fmtDate(acS),e:fmtDate(acE),st:ac.status,a:ac.assignee,p:'',sm:ac.sum,r:'',tp:'ABAP (связанная)',u:'',labels:'',est:fmtD(ac.est),spent:fmtD(ac.spent),rem:fmtD(ac.rem),sys:'ABAP'});
         const lac=document.createElement('tr');
         lac.className='task-row abap-child-row';
         lac.dataset.key=ac.key;
