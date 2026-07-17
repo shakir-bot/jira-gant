@@ -61,7 +61,7 @@
   .milestone-chip .mx:hover{color:#dc2626}
   .instructions{padding:2px 28px 10px;font-size:12px;color:#94a3b8;transition:color .2s}
   .gantt-split{margin:0 28px;display:flex;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
-  .gantt-left-pane{flex:none;width:850px;max-height:640px;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;border-right:1px solid #e2e8f0}
+  .gantt-left-pane{flex:none;width:940px;max-height:640px;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;border-right:1px solid #e2e8f0}
   .gantt-left-pane::-webkit-scrollbar{width:0;height:0}
   .gantt-right-pane{flex:1;max-height:640px;overflow:auto;min-width:0}
   .section-title{font-size:13px;font-weight:700;color:#475569;padding:10px 12px 6px;border-bottom:1px solid #e2e8f0;margin-bottom:0;text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px;position:sticky;top:0;z-index:20;background:#fff;height:36px;box-sizing:border-box;overflow:hidden}
@@ -91,6 +91,9 @@
   .col-assignee{width:170px;white-space:nowrap}
   .col-status{width:150px}
   .col-estimate{width:70px;white-space:nowrap;text-align:center}
+  .col-plandate{width:90px;white-space:nowrap;text-align:center}
+  .plandate-text{color:#475569;font-size:12px;font-weight:600}
+  .plandate-text.overdue-text{color:#dc2626}
   .col-chart{}
   a.key-link{color:#2563eb;text-decoration:none;font-weight:600;font-size:12px}
   a.key-link:hover{text-decoration:underline}
@@ -1995,6 +1998,8 @@ function drawMilestones(){
   if(!container)return;
   let overlay=document.getElementById('milestonesOverlay');
   if(overlay)overlay.remove();
+  const msRow=document.getElementById('globalMilestoneRow');
+  if(msRow)msRow.innerHTML='';
   if(milestones.length===0)return;
   const anyCell=container.querySelector('.chart-cell');
   if(!anyCell)return;
@@ -2002,6 +2007,8 @@ function drawMilestones(){
   const contRect=container.getBoundingClientRect();
   const offsetX=cellRect.left-contRect.left;
   const cellWidth=cellRect.width;
+
+  // Пунктирные линии — на всю высоту содержимого, обычный (не закреплённый) слой
   overlay=document.createElement('div');
   overlay.id='milestonesOverlay';
   overlay.style.position='absolute';
@@ -2010,9 +2017,7 @@ function drawMilestones(){
   overlay.style.width='100%';
   overlay.style.height=container.scrollHeight+'px';
   overlay.style.pointerEvents='none';
-  const sortedMs=milestones.slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const laneRightEdge=[];
-  sortedMs.forEach(m=>{
+  milestones.forEach(m=>{
     const c=getMilestoneColor(m.color);
     const pct=dayPos(m.date+'T00:00:00');
     const x=offsetX+(pct/100)*cellWidth;
@@ -2022,6 +2027,17 @@ function drawMilestones(){
     line.style.height=container.scrollHeight+'px';
     line.style.borderLeftColor=c.strong;
     overlay.appendChild(line);
+  });
+  container.appendChild(overlay);
+
+  // Флаги и подписи — в единой закреплённой строке (видна всегда, общая для всех этапов)
+  if(!msRow)return;
+  const sortedMs=milestones.slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const laneRightEdge=[];
+  sortedMs.forEach(m=>{
+    const c=getMilestoneColor(m.color);
+    const pct=dayPos(m.date+'T00:00:00');
+    const x=(pct/100)*cellWidth;
     const flag=document.createElement('div');
     flag.className='milestone-flag';
     flag.style.left=x+'px';
@@ -2029,7 +2045,7 @@ function drawMilestones(){
     flag.style.pointerEvents='auto';
     flag.title=m.title+' — '+fmtDate(m.date);
     flag.onclick=()=>removeMilestone(m.id);
-    overlay.appendChild(flag);
+    msRow.appendChild(flag);
     const label=document.createElement('div');
     label.className='milestone-label';
     label.style.left=(x+6)+'px';
@@ -2039,17 +2055,16 @@ function drawMilestones(){
     label.title=m.title+' — '+fmtDate(m.date);
     label.style.pointerEvents='auto';
     label.onclick=()=>removeMilestone(m.id);
-    overlay.appendChild(label);
+    msRow.appendChild(label);
     const labelWidth=label.getBoundingClientRect().width||80;
     let lane=0;
     while(laneRightEdge[lane]!==undefined&&x<laneRightEdge[lane]+4){
       lane++;
-      if(lane>5){lane=0;break;}
+      if(lane>1){lane=0;break;}
     }
     laneRightEdge[lane]=x+6+labelWidth;
-    label.style.top=(2+lane*16)+'px';
+    label.style.top=(2+lane*18)+'px';
   });
-  container.appendChild(overlay);
 }
 
 function buildGantt(){
@@ -2104,8 +2119,31 @@ function buildGantt(){
   const headerColsHtml=buildHeaderColsHtml(timeCols);
   const gridColsHtml=buildGridColsHtml(timeCols);
   const tableMinWidth=ganttMinWidth(timeCols);
-  const FIXED_COLS_WIDTH=850;
+  const FIXED_COLS_WIDTH=940;
   const chartColWidth=Math.max(tableMinWidth-FIXED_COLS_WIDTH,200);
+
+  // Единая закреплённая шапка (месяцы/недели/кварталы) + строка флагов вех —
+  // общая для всех секций/этапов, не пересоздаётся при скролле между ними.
+  const GLOBAL_HEADER_H=26, GLOBAL_MS_ROW_H=38;
+  if(sortedGroups.length>0){
+    const headerWrap=document.createElement('div');
+    headerWrap.id='globalTimelineHeaderWrap';
+    headerWrap.style.cssText='position:sticky;top:0;z-index:25;background:#fff';
+    const tlhGlobal=document.createElement('div');
+    tlhGlobal.className='timeline-header';
+    tlhGlobal.style.cssText='display:flex;border-bottom:1px solid #e2e8f0;background:#f8fafc;height:'+GLOBAL_HEADER_H+'px;box-sizing:border-box;position:static;width:'+chartColWidth+'px';
+    tlhGlobal.innerHTML=headerColsHtml;
+    headerWrap.appendChild(tlhGlobal);
+    const msRow=document.createElement('div');
+    msRow.id='globalMilestoneRow';
+    msRow.style.cssText='position:relative;height:'+GLOBAL_MS_ROW_H+'px;width:'+chartColWidth+'px;background:#fff;border-bottom:1px solid #f1f5f9';
+    headerWrap.appendChild(msRow);
+    rightContainer.appendChild(headerWrap);
+
+    const leftSpacer=document.createElement('div');
+    leftSpacer.style.cssText='position:sticky;top:0;z-index:13;height:'+(GLOBAL_HEADER_H+GLOBAL_MS_ROW_H)+'px;background:#fff;border-bottom:1px solid #e2e8f0;box-sizing:border-box';
+    leftContainer.appendChild(leftSpacer);
+  }
 
   sortedGroups.forEach(gk=>{
     let items=groups.get(gk);
@@ -2154,33 +2192,24 @@ function buildGantt(){
     if(isStageGroup)sTitle.onclick=()=>{if(window.__ganttSuppressClick){window.__ganttSuppressClick=false;return;}toggleStageCollapse(gk);};
     if(isStageGroup){leftSection.dataset.stageId=gk;}
     leftSection.appendChild(sTitle);
-    const thSpacer=document.createElement('div');
-    thSpacer.className='timeline-header-spacer';
-    leftSection.appendChild(thSpacer);
 
     const leftTable=document.createElement('table');
     leftTable.className='gantt-table';
     leftTable.style.width=FIXED_COLS_WIDTH+'px';
     const leftColgroup=document.createElement('colgroup');
-    [30,150,280,170,150,70].forEach(w=>{
+    [30,150,280,170,150,70,90].forEach(w=>{
       const col=document.createElement('col');
       col.style.width=w+'px';
       leftColgroup.appendChild(col);
     });
     leftTable.appendChild(leftColgroup);
 
-    // RIGHT section: title spacer + real timeline header + chart-only table
+    // RIGHT section: title spacer (совпадает по высоте с заголовком секции слева)
     const rightSection=document.createElement('div');
     if(isStageGroup)rightSection.dataset.stageId=gk;
     const titleSpacer=document.createElement('div');
     titleSpacer.className='section-title-spacer';
     rightSection.appendChild(titleSpacer);
-    const tlh=document.createElement('div');
-    tlh.className='timeline-header';
-    tlh.style.paddingLeft='0';
-    tlh.style.width=chartColWidth+'px';
-    tlh.innerHTML=headerColsHtml;
-    rightSection.appendChild(tlh);
 
     const rightTable=document.createElement('table');
     rightTable.className='gantt-table';
@@ -2201,7 +2230,7 @@ function buildGantt(){
         lstg.className='stage-summary-row';
         lstg.innerHTML=
           '<td class="col-order"><span class="drag-handle" onpointerdown="startStageMove(event,\''+gk+'\')" title="Перетащите, чтобы сдвинуть все задачи этапа целиком">⠿</span></td>'+
-          '<td class="col-key" colspan="5">📦 Весь этап «'+titleText+'» ('+bounds.children.length+' задач) — перетащите ⠿ слева, чтобы сдвинуть все даты сразу</td>';
+          '<td class="col-key" colspan="6">📦 Весь этап «'+titleText+'» ('+bounds.children.length+' задач) — перетащите ⠿ слева, чтобы сдвинуть все даты сразу</td>';
         leftTable.appendChild(lstg);
 
         const rstg=document.createElement('tr');
@@ -2254,7 +2283,8 @@ function buildGantt(){
         '<td class="col-summary"><span class="summary-text" title="'+t.sum.replace(/"/g,'&quot;')+'">'+t.sum+'</span></td>'+
         '<td class="col-assignee">'+renderAssigneeCell(t.key,t.assignee)+'</td>'+
         '<td class="col-status">'+renderStatusCell(t.key,t.status,statusShort)+'</td>'+
-        '<td class="col-estimate"><span class="estimate-text">'+estDisplay+'</span></td>';
+        '<td class="col-estimate"><span class="estimate-text">'+estDisplay+'</span></td>'+
+        '<td class="col-plandate"><span class="plandate-text'+(overdue?' overdue-text':'')+'" title="Плановая дата завершения">'+fmtDate(t.e)+'</span></td>';
       leftTable.appendChild(ltr);
 
       const rtr=document.createElement('tr');
@@ -2293,7 +2323,8 @@ function buildGantt(){
           '<td class="col-summary"><span class="summary-text" title="'+ac.sum.replace(/"/g,'&quot;')+'">'+ac.sum+'</span></td>'+
           '<td class="col-assignee"><span class="assignee-text">'+ac.assignee+'</span></td>'+
           '<td class="col-status"><span class="status-badge '+statusClass(ac.status)+'">'+acStatusShort+'</span></td>'+
-          '<td class="col-estimate"><span class="estimate-text">'+fmtDshort(ac.est)+'</span></td>';
+          '<td class="col-estimate"><span class="estimate-text">'+fmtDshort(ac.est)+'</span></td>'+
+          '<td class="col-plandate"><span class="plandate-text">'+fmtDate(acE)+'</span></td>';
         leftTable.appendChild(lac);
 
         const rac=document.createElement('tr');
