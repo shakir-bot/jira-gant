@@ -177,21 +177,29 @@ function dumpCertChain(hostname, port) {
           cert = (cert.issuerCertificate && cert.issuerCertificate.fingerprint !== cert.fingerprint) ? cert.issuerCertificate : null;
         }
         socket.end();
-        if (chain.length === 0) console.error('  [диагностика сертификата] TLS-соединение установлено, но цепочка сертификатов пуста (getPeerCertificate вернул пусто)');
-        finish(chain);
+        if (chain.length === 0) {
+          const reason = 'TLS-соединение установлено, но цепочка сертификатов пуста (getPeerCertificate вернул пусто)';
+          console.error('  [диагностика сертификата] ' + reason);
+          finish({ chain: null, reason });
+        } else {
+          finish({ chain, reason: null });
+        }
       });
       socket.on('error', (err) => {
-        console.error('  [диагностика сертификата] Не удалось напрямую подключиться к ' + hostname + ':' + (port || 443) + ' — ' + err.message);
-        finish(null);
+        const reason = 'не удалось напрямую подключиться к ' + hostname + ':' + (port || 443) + ' (' + err.message + ')';
+        console.error('  [диагностика сертификата] ' + reason);
+        finish({ chain: null, reason });
       });
       socket.setTimeout(4000, () => {
-        console.error('  [диагностика сертификата] Таймаут подключения к ' + hostname + ':' + (port || 443));
+        const reason = 'таймаут прямого подключения к ' + hostname + ':' + (port || 443) + ' (4 секунды)';
+        console.error('  [диагностика сертификата] ' + reason);
         socket.destroy();
-        finish(null);
+        finish({ chain: null, reason });
       });
     } catch (e) {
-      console.error('  [диагностика сертификата] Исключение: ' + e.message);
-      finish(null);
+      const reason = 'исключение — ' + e.message;
+      console.error('  [диагностика сертификата] ' + reason);
+      finish({ chain: null, reason });
     }
   });
 }
@@ -204,18 +212,22 @@ async function friendlyNetworkError(e, hostname) {
     if (certCodes.includes(code)) {
       hint += ' Похоже, корпоративная защита (антивирус/фаервол) подменяет сертификаты сайтов своим — браузер ему доверяет, а Node.js по умолчанию нет.';
       let chainFound = false;
+      let diagReason = null;
       if (hostname) {
-        const chain = await dumpCertChain(hostname);
-        if (chain && chain.length) {
+        const diag = await dumpCertChain(hostname);
+        if (diag && diag.chain && diag.chain.length) {
           chainFound = true;
-          const top = chain[chain.length - 1];
+          const top = diag.chain[diag.chain.length - 1];
           hint += ' Реальная цепочка сертификатов, которую видит само приложение: '
-            + chain.map(c => c.subject).join(' → ') + '.'
+            + diag.chain.map(c => c.subject).join(' → ') + '.'
             + ' Скорее всего, вам нужен корневой сертификат «' + top.subject + '» (обычно его можно найти в Windows: certmgr.msc → Доверенные корневые центры сертификации → экспортировать этот же сертификат по имени).';
+        } else if (diag) {
+          diagReason = diag.reason;
         }
       }
       if (!chainFound) {
-        hint += ' Автоматически определить название сертификата не удалось (подробности — в чёрном окне консоли, строка "[диагностика сертификата]").'
+        hint += ' Автоматическая диагностика не дала ответа'
+          + (diagReason ? (' (причина: ' + diagReason + ')') : '') + '.'
           + ' Ручной способ: в Windows откройте certmgr.msc → «Доверенные корневые центры сертификации» → найдите сертификат с именем вашей компании/антивируса (НЕ Amazon/DigiCert/Let\'s Encrypt) → правой кнопкой «Все задачи» → «Экспорт» → формат Base-64 X.509 (.CER).';
       }
       hint += ' Путь к экспортированному файлу укажите в переменной окружения NODE_EXTRA_CA_CERTS (см. README, раздел «Корпоративный прокси / сертификат»).';
