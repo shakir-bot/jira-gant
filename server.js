@@ -177,11 +177,20 @@ function dumpCertChain(hostname, port) {
           cert = (cert.issuerCertificate && cert.issuerCertificate.fingerprint !== cert.fingerprint) ? cert.issuerCertificate : null;
         }
         socket.end();
+        if (chain.length === 0) console.error('  [диагностика сертификата] TLS-соединение установлено, но цепочка сертификатов пуста (getPeerCertificate вернул пусто)');
         finish(chain);
       });
-      socket.on('error', () => finish(null));
-      socket.setTimeout(4000, () => { socket.destroy(); finish(null); });
+      socket.on('error', (err) => {
+        console.error('  [диагностика сертификата] Не удалось напрямую подключиться к ' + hostname + ':' + (port || 443) + ' — ' + err.message);
+        finish(null);
+      });
+      socket.setTimeout(4000, () => {
+        console.error('  [диагностика сертификата] Таймаут подключения к ' + hostname + ':' + (port || 443));
+        socket.destroy();
+        finish(null);
+      });
     } catch (e) {
+      console.error('  [диагностика сертификата] Исключение: ' + e.message);
       finish(null);
     }
   });
@@ -194,16 +203,22 @@ async function friendlyNetworkError(e, hostname) {
     const certCodes = ['SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'CERT_HAS_EXPIRED'];
     if (certCodes.includes(code)) {
       hint += ' Похоже, корпоративная защита (антивирус/фаервол) подменяет сертификаты сайтов своим — браузер ему доверяет, а Node.js по умолчанию нет.';
+      let chainFound = false;
       if (hostname) {
         const chain = await dumpCertChain(hostname);
         if (chain && chain.length) {
+          chainFound = true;
           const top = chain[chain.length - 1];
           hint += ' Реальная цепочка сертификатов, которую видит само приложение: '
             + chain.map(c => c.subject).join(' → ') + '.'
             + ' Скорее всего, вам нужен корневой сертификат «' + top.subject + '» (обычно его можно найти в Windows: certmgr.msc → Доверенные корневые центры сертификации → экспортировать этот же сертификат по имени).';
         }
       }
-      hint += ' Укажите нужный сертификат в переменной окружения NODE_EXTRA_CA_CERTS (см. README, раздел «Корпоративный прокси / сертификат»).';
+      if (!chainFound) {
+        hint += ' Автоматически определить название сертификата не удалось (подробности — в чёрном окне консоли, строка "[диагностика сертификата]").'
+          + ' Ручной способ: в Windows откройте certmgr.msc → «Доверенные корневые центры сертификации» → найдите сертификат с именем вашей компании/антивируса (НЕ Amazon/DigiCert/Let\'s Encrypt) → правой кнопкой «Все задачи» → «Экспорт» → формат Base-64 X.509 (.CER).';
+      }
+      hint += ' Путь к экспортированному файлу укажите в переменной окружения NODE_EXTRA_CA_CERTS (см. README, раздел «Корпоративный прокси / сертификат»).';
     } else if (code === 'ENOTFOUND') {
       hint += ' Проверьте правильность адреса сайта Jira (например detmir.atlassian.net).';
     } else if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
